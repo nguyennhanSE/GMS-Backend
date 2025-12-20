@@ -13,16 +13,16 @@ async function bootstrap() {
   if (NODE_ENV === 'development') {
     swaggerConfig = new DocumentBuilder()
       .addBearerAuth()
-      .setTitle('Liflow Backend API')
-      .setDescription('API of Liflow Backend with authentication and role-based authorization')
+      .setTitle('GMS Backend API')
+      .setDescription('API of GMS Backend with authentication and role-based authorization')
       .setVersion('1.0')
       .addServer(`http://localhost:${config.APP_PORT}/api/v1`, 'Development server')
       .build();
   } else if (NODE_ENV === 'production') {
     swaggerConfig = new DocumentBuilder()
       .addBearerAuth()
-      .setTitle('Liflow Backend API')
-      .setDescription('API of Liflow Backend with authentication and role-based authorization')
+      .setTitle('GMS Backend API')
+      .setDescription('API of GMS Backend with authentication and role-based authorization')
       .setVersion('1.0')
       .addServer(`${config.APP_HOST}/api/v1`, 'Production server')
       .build();

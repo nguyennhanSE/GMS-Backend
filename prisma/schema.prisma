@@ -1,0 +1,165 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  firstName String   @map("first_name") @db.VarChar(255)
+  lastName  String   @map("last_name") @db.VarChar(255)
+  email     String   @unique @db.VarChar(255)
+  password  String   @db.VarChar(255)
+  phone     String?  @db.VarChar(50)
+  gender    String?  @db.VarChar(20)
+  dob       DateTime? @db.Date
+  address   String?  @db.Text
+  status    String?  @db.VarChar(50)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  // extension for trainer
+  trainerAvailableTime Json? @map("trainer_available_time")
+  trainerAvailableDays String[] @map("trainer_available_days") @default([])
+  
+  // relations
+  userRole UserRole[]
+  userMembership UserMembership[]
+  classBookings ClassBooking[]
+  sessions Session[]
+  @@map("users")
+}
+
+model UserMembership {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  membershipId String @db.Uuid
+  membershipName String @map("membership_name")
+  membershipDescription String @map("membership_description")
+  status String @default("normal") @map("status")
+
+  startDate DateTime @map("start_date")
+  endDate DateTime @map("end_date")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  // relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  // extension
+  updatedByAdmin Boolean @default(false) @map("updated_by_admin")
+
+  @@index([userId, membershipId])
+  @@index([membershipId])
+  @@index([userId])
+  @@map("user_memberships")
+}
+
+model Membership {
+  id String @id @default(uuid()) @db.Uuid
+  name String @unique
+  description String?
+  minPrice Int @map("min_price")
+  userMembership UserMembership[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  @@map("memberships")
+  @@index([name])
+  @@index([minPrice])
+}
+
+model Role {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @unique
+  description String?
+
+  userRole UserRole[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@index([userId])
+  @@map("user_roles")
+}
+
+model Session {
+  id     String @id @default(uuid())
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  refreshToken     String             @unique
+  ip               String?
+  expiredAt        DateTime
+  refreshTokenUsed RefreshTokenUsed[]
+
+  @@index([userId, expiredAt])
+  @@map("sessions")
+}
+
+model RefreshTokenUsed {
+  id           String  @id @default(uuid())
+  refreshToken String  @unique
+  sessionId    String
+  session      Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("refresh_token_used")
+}
+
+model ClassBooking {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid 
+  classScheduleId  String?   @map("class_schedule_id") @db.Uuid
+  bookingStartDate DateTime @map("booking_start_date") @db.Date
+  bookingEndDate   DateTime @map("booking_end_date") @db.Date
+  status           String?  @db.VarChar(50)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  classSchedule ClassSchedule? @relation(fields: [classScheduleId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([classScheduleId])
+  @@map("class_bookings")
+}
+
+model ClassSchedule {
+  id String @id @default(uuid()) @db.Uuid
+  name String @unique
+  description String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  classStartTime DateTime @map("class_start_time") @db.Timestamp(6)
+  classEndTime DateTime @map("class_end_time") @db.Timestamp(6)
+
+  classBookings ClassBooking[]
+
+  @@map("class_schedules")
+}

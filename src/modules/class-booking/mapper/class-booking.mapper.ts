@@ -1,0 +1,91 @@
+import { Prisma } from '@prisma/client';
+import { ClassBookingEntity } from '../entities/class-booking.entity';
+import { CreateClassBookingDto } from '../dto/create-class-booking.dto';
+import { toUserEntity } from 'src/modules/user/mapper/user.mapper';
+import { toClassScheduleEntity } from 'src/modules/class-schedule/mapper/class-schedule.mapper';
+
+type ClassBookingModel = Prisma.ClassBookingGetPayload<Record<string, never>>;
+type ClassBookingWithRelations = Prisma.ClassBookingGetPayload<{
+  include: {
+    user: true;
+    classSchedule: true;
+  };
+}>;
+
+/**
+ * Maps Prisma ClassBooking model to ClassBookingEntity
+ */
+export function toClassBookingEntity(classBooking: ClassBookingModel): ClassBookingEntity {
+  return {
+    id: classBooking.id,
+    userId: classBooking.userId || '',
+    classScheduleId: classBooking.classScheduleId || '',
+    bookingStartDate: classBooking.bookingStartDate,
+    bookingEndDate: classBooking.bookingEndDate,
+    status: classBooking.status || '',
+    createdAt: classBooking.createdAt,
+    updatedAt: null,
+  };
+}
+
+/**
+ * Maps Prisma ClassBooking with relations to ClassBookingEntity
+ */
+export function toClassBookingEntityWithRelations(classBooking: ClassBookingWithRelations): ClassBookingEntity {
+  return {
+    id: classBooking.id,
+    userId: classBooking.userId || '',
+    classScheduleId: classBooking.classScheduleId || '',
+    bookingStartDate: classBooking.bookingStartDate,
+    bookingEndDate: classBooking.bookingEndDate,
+    status: classBooking.status || '',
+    createdAt: classBooking.createdAt,
+    updatedAt: null,
+    user: classBooking.user ? toUserEntity(classBooking.user) : null,
+    classSchedule: classBooking.classSchedule ? toClassScheduleEntity(classBooking.classSchedule) : null,
+  };
+}
+
+/**
+ * Maps CreateClassBookingDto to Prisma ClassBooking create input
+ */
+export function toPrismaClassBookingCreateInput(dto: CreateClassBookingDto): Prisma.ClassBookingCreateInput {
+  return {
+    bookingStartDate: dto.bookingStartDate,
+    bookingEndDate: dto.bookingEndDate,
+    status: dto.status || null,
+    user: {
+      connect: { id: dto.userId }
+    },
+    classSchedule: {
+      connect: { id: dto.classScheduleId }
+    }
+  };
+}
+
+/**
+ * Maps ClassBookingEntity to response DTO
+ */
+export function toResponse(entity: ClassBookingEntity) {
+  return {
+    id: entity.id,
+    userId: entity.userId,
+    classScheduleId: entity.classScheduleId,
+    bookingStartDate: entity.bookingStartDate,
+    bookingEndDate: entity.bookingEndDate,
+    status: entity.status,
+    createdAt: entity.createdAt,
+    user: entity.user ? {
+      id: entity.user.id,
+      firstName: entity.user.firstName,
+      lastName: entity.user.lastName,
+      email: entity.user.email,
+    } : null,
+    classSchedule: entity.classSchedule ? {
+      id: entity.classSchedule.id,
+      name: entity.classSchedule.name,
+      description: entity.classSchedule.description,
+    } : null,
+  };
+}
+

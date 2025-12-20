@@ -38,13 +38,13 @@ services:
       #   (it only injects env into the container once it starts).
       # So we provide defaults to prevent Postgres from exiting when variables are missing.
       POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-123456}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-Nhan@010104}
       POSTGRES_DB: ${DATABASE_NAME:-postgres}
       PGDATA: /data/postgres
     volumes:
       - postgres:/data/postgres
     ports:
-      - "5540:5432"
+      - "5432:5432"
     networks:
       - gms-network
     healthcheck:
@@ -85,7 +85,7 @@ services:
       - BACKUP_KEEP_DAYS=7
       - EXTRA_OPTS=--schema=public
     networks:
-      - liflow-network
+      - gms-network
     
 networks:
   gms-network:

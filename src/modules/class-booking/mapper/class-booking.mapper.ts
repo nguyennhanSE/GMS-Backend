@@ -51,9 +51,9 @@ export function toClassBookingEntityWithRelations(classBooking: ClassBookingWith
  */
 export function toPrismaClassBookingCreateInput(dto: CreateClassBookingDto): Prisma.ClassBookingCreateInput {
   return {
-    bookingStartDate: dto.bookingStartDate,
-    bookingEndDate: dto.bookingEndDate,
-    status: dto.status || null,
+    bookingStartDate: dto.bookingStartDate || new Date(),
+    bookingEndDate: dto.bookingEndDate || new Date(),
+    status: dto.status || 'pending',
     user: {
       connect: { id: dto.userId }
     },

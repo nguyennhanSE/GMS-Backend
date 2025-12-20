@@ -6,8 +6,15 @@ services:
       dockerfile: Dockerfile
     image: gms-backend-image
     pull_policy: never
+    container_name: gms-backend
     env_file:
-      - .env.docker
+      - .env.prod
+    environment:
+      # Override DATABASE_HOST to use Docker service name instead of localhost
+      - DATABASE_HOST=postgres
+      # DATABASE_URL will be constructed by wait-for-postgres.sh script
+      # Override REDIS_HOST to use Docker service name
+      - REDIS_HOST=redis
     ports:
       - "3500:3500"
     depends_on:
@@ -17,12 +24,13 @@ services:
         condition: service_started
     restart: unless-stopped
     networks:
-      - liflow-network
+      - gms-network
+  
 
   postgres:
     image: postgres
     env_file:
-      - .env.dev  
+      - .env.prod  
     environment:
       # IMPORTANT:
       # - `${...}` here is resolved by Docker Compose *before* containers start.
@@ -38,7 +46,7 @@ services:
     ports:
       - "5540:5432"
     networks:
-      - liflow-network
+      - gms-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready"]
       interval: 5s
@@ -52,7 +60,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - liflow-network
+      - gms-network
     # Ubuntu/EC2 optimizations
     # sysctls:
     #   - net.core.somaxconn=65535
@@ -63,7 +71,7 @@ services:
   backup:
     image: prodrigestivill/postgres-backup-local
     env_file:
-      - .env.dev
+      - .env.prod
     restart: unless-stopped
     volumes:
       - ./backups:/backups
@@ -80,7 +88,7 @@ services:
       - liflow-network
     
 networks:
-  liflow-network:
+  gms-network:
     driver: bridge
 
 volumes:

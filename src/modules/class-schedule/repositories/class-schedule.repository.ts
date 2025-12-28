@@ -90,6 +90,26 @@ export class ClassScheduleRepository {
       updateData.description = updateDto.description || null;
     }
 
+    if (updateDto.classStartTime !== undefined) {
+      updateData.classStartTime = updateDto.classStartTime;
+    }
+
+    if (updateDto.classEndTime !== undefined) {
+      updateData.classEndTime = updateDto.classEndTime;
+    }
+
+    if (updateDto.trainerId !== undefined) {
+      if (updateDto.trainerId) {
+        updateData.trainer = {
+          connect: { id: updateDto.trainerId }
+        };
+      } else {
+        updateData.trainer = {
+          disconnect: true
+        };
+      }
+    }
+
     // Update class schedule
     const updatedClassSchedule = await this.prisma.classSchedule.update({
       where: { id },

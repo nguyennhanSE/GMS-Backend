@@ -8,6 +8,13 @@ export class ClassScheduleEntity {
     updatedAt?: Date | null;
     classStartTime?: Date | null;
     classEndTime?: Date | null; 
+    trainerId?: string | null;
 
     classBookings?: ClassBookingEntity[];
+    trainer?: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+    } | null;
 }

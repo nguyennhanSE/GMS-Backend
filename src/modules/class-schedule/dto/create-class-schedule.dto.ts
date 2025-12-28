@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsOptional, IsString, MaxLength, IsDate } from "class-validator";
+import { IsNotEmpty, IsOptional, IsString, MaxLength, IsDate, IsUUID } from "class-validator";
 import { Transform } from "class-transformer";
 import { trim } from "src/utils/helper";
 
@@ -32,7 +32,10 @@ export class CreateClassScheduleDto {
     })
     @IsDate()
     @IsNotEmpty()
-    @Transform(({ value }) => new Date(value || ''))
+    @Transform(({ value }) => {
+        if (!value) return new Date();
+        return new Date(String(value));
+    })
     classStartTime!: Date;
 
     @ApiProperty({
@@ -41,6 +44,18 @@ export class CreateClassScheduleDto {
     })
     @IsDate()
     @IsNotEmpty()
-    @Transform(({ value }) => new Date(value || ''))
+    @Transform(({ value }) => {
+        if (!value) return new Date();
+        return new Date(String(value));
+    })
     classEndTime!: Date;
+
+    @ApiPropertyOptional({
+        description: 'Trainer ID (optional)',
+        example: '123e4567-e89b-12d3-a456-426614174000',
+        format: 'uuid'
+    })
+    @IsOptional()
+    @IsUUID()
+    trainerId?: string;
 }

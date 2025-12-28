@@ -37,6 +37,8 @@ model User {
   userMembership UserMembership[]
   classBookings ClassBooking[]
   sessions Session[]
+  trainerAvailabilities TrainerAvailability[]
+  classSchedules ClassSchedule[]
   @@map("users")
 }
 
@@ -159,7 +161,29 @@ model ClassSchedule {
   classStartTime DateTime @map("class_start_time") @db.Timestamp(6)
   classEndTime DateTime @map("class_end_time") @db.Timestamp(6)
 
+  trainerId String? @map("trainer_id") @db.Uuid
+  trainer User? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+
   classBookings ClassBooking[]
 
+  @@index([trainerId])
   @@map("class_schedules")
+}
+
+model TrainerAvailability {
+  id String @id @default(uuid()) @db.Uuid
+  trainerId String @map("trainer_id") @db.Uuid
+  dayOfWeek Int @map("day_of_week") // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime DateTime @map("start_time") @db.Time
+  endTime DateTime @map("end_time") @db.Time
+  isAvailable Boolean @default(true) @map("is_available")
+  
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  trainer User @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@index([trainerId])
+  @@index([trainerId, dayOfWeek])
+  @@map("trainer_availabilities")
 }

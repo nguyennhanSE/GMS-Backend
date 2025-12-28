@@ -7,6 +7,7 @@ type ClassScheduleModel = Prisma.ClassScheduleGetPayload<Record<string, never>>;
 type ClassScheduleWithRelations = Prisma.ClassScheduleGetPayload<{
   include: {
     classBookings: true;
+    trainer: true;
   };
 }>;
 
@@ -22,6 +23,7 @@ export function toClassScheduleEntity(classSchedule: ClassScheduleModel): ClassS
     updatedAt: classSchedule.updatedAt,
     classStartTime: classSchedule.classStartTime,
     classEndTime: classSchedule.classEndTime,
+    trainerId: classSchedule.trainerId,
   };
 }
 
@@ -29,12 +31,20 @@ export function toClassScheduleEntity(classSchedule: ClassScheduleModel): ClassS
  * Maps CreateClassScheduleDto to Prisma ClassSchedule create input
  */
 export function toPrismaClassScheduleCreateInput(dto: CreateClassScheduleDto): Prisma.ClassScheduleCreateInput {
-  return {
+  const input: Prisma.ClassScheduleCreateInput = {
     name: dto.name,
     description: dto.description || null,
     classStartTime: dto.classStartTime,
     classEndTime: dto.classEndTime,
   };
+
+  if (dto.trainerId) {
+    input.trainer = {
+      connect: { id: dto.trainerId }
+    };
+  }
+
+  return input;
 }
 
 /**
@@ -49,6 +59,8 @@ export function toResponse(entity: ClassScheduleEntity) {
     updatedAt: entity.updatedAt,
     classStartTime: entity.classStartTime,
     classEndTime: entity.classEndTime,
+    trainerId: entity.trainerId,
+    trainer: entity.trainer,
   };
 }
 
@@ -62,6 +74,13 @@ export function toClassScheduleWithRelations(classSchedule: ClassScheduleWithRel
     classBookings: classSchedule.classBookings.map(x => toClassBookingEntity(x)),
     classStartTime: classSchedule.classStartTime,
     classEndTime: classSchedule.classEndTime,
+    trainerId: classSchedule.trainerId,
+    trainer: classSchedule.trainer ? {
+      id: classSchedule.trainer.id,
+      firstName: classSchedule.trainer.firstName,
+      lastName: classSchedule.trainer.lastName,
+      email: classSchedule.trainer.email,
+    } : null,
   };
 };
 

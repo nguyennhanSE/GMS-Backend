@@ -44,11 +44,13 @@ model User {
 
 model UserMembership {
   id String @id @default(uuid()) @db.Uuid
-  userId String @db.Uuid
+  userId String  @db.Uuid
   membershipId String @db.Uuid
   membershipName String @map("membership_name")
   membershipDescription String @map("membership_description")
+  membershipPaymentId String? @unique @map("membership_payment_id") @db.Uuid
   status String @default("normal") @map("status")
+  level MembershipLevel @default(BASIC) @map("level")
 
   startDate DateTime @map("start_date")
   endDate DateTime @map("end_date")
@@ -58,7 +60,7 @@ model UserMembership {
   // relations
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-
+  membershipPayment MembershipPayment? @relation(fields: [membershipPaymentId], references: [id], onDelete: SetNull)
   // extension
   updatedByAdmin Boolean @default(false) @map("updated_by_admin")
 
@@ -68,11 +70,17 @@ model UserMembership {
   @@map("user_memberships")
 }
 
+enum MembershipLevel {
+  BASIC
+  PREMIUM
+  ELITE
+}
 model Membership {
   id String @id @default(uuid()) @db.Uuid
   name String @unique
   description String?
   minPrice Int @map("min_price")
+  level MembershipLevel @default(BASIC) @map("level")
   userMembership UserMembership[]
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime? @updatedAt @map("updated_at")
@@ -80,6 +88,22 @@ model Membership {
   @@map("memberships")
   @@index([name])
   @@index([minPrice])
+}
+
+model MembershipPayment {
+  id String @id @default(uuid()) @db.Uuid
+  membershipId String @db.Uuid
+  amount Int @map("amount")
+  method String @map("method")
+  gatewayName String @map("gateway_name")
+  gatewayTransactionId String @map("gateway_transaction_id")
+  status String @map("status")
+  completedAt DateTime? @map("completed_at")
+
+  userMembership UserMembership? 
+
+  @@index([membershipId])
+  @@map("membership_payments")
 }
 
 model Role {
@@ -110,6 +134,13 @@ model UserRole {
   @@map("user_roles")
 }
 
+// model Permission {
+
+// }
+
+// model RolePermission {
+
+// }
 model Session {
   id     String @id @default(uuid())
   userId String @db.Uuid
@@ -187,3 +218,4 @@ model TrainerAvailability {
   @@index([trainerId, dayOfWeek])
   @@map("trainer_availabilities")
 }
+

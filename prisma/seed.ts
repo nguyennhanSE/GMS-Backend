@@ -105,33 +105,33 @@ async function main() {
   const [basicMembership, premiumMembership, vipMembership, studentMembership, seniorMembership, dayPassMembership] = await Promise.all([
     prisma.membership.upsert({
       where: { name: 'Basic' },
-      update: { description: 'Access to gym during staffed hours', minPrice: 199000 },
-      create: { name: 'Basic', description: 'Access to gym during staffed hours', minPrice: 199000 },
+      update: { description: 'Access to gym during staffed hours', minPrice: 199000, level: 'BASIC' },
+      create: { name: 'Basic', description: 'Access to gym during staffed hours', minPrice: 199000, level: 'BASIC' },
     }),
     prisma.membership.upsert({
       where: { name: 'Premium' },
-      update: { description: '24/7 access + group classes', minPrice: 399000 },
-      create: { name: 'Premium', description: '24/7 access + group classes', minPrice: 399000 },
+      update: { description: '24/7 access + group classes', minPrice: 399000, level: 'PREMIUM' },
+      create: { name: 'Premium', description: '24/7 access + group classes', minPrice: 399000, level: 'PREMIUM' },
     }),
     prisma.membership.upsert({
       where: { name: 'VIP' },
-      update: { description: '24/7 access + all classes + personal training sessions', minPrice: 799000 },
-      create: { name: 'VIP', description: '24/7 access + all classes + personal training sessions', minPrice: 799000 },
+      update: { description: '24/7 access + all classes + personal training sessions', minPrice: 799000, level: 'ELITE' },
+      create: { name: 'VIP', description: '24/7 access + all classes + personal training sessions', minPrice: 799000, level: 'ELITE' },
     }),
     prisma.membership.upsert({
       where: { name: 'Student' },
-      update: { description: 'Discounted membership for students with valid ID', minPrice: 149000 },
-      create: { name: 'Student', description: 'Discounted membership for students with valid ID', minPrice: 149000 },
+      update: { description: 'Discounted membership for students with valid ID', minPrice: 149000, level: 'BASIC' },
+      create: { name: 'Student', description: 'Discounted membership for students with valid ID', minPrice: 149000, level: 'BASIC' },
     }),
     prisma.membership.upsert({
       where: { name: 'Senior' },
-      update: { description: 'Special rate for seniors 60+', minPrice: 129000 },
-      create: { name: 'Senior', description: 'Special rate for seniors 60+', minPrice: 129000 },
+      update: { description: 'Special rate for seniors 60+', minPrice: 129000, level: 'BASIC' },
+      create: { name: 'Senior', description: 'Special rate for seniors 60+', minPrice: 129000, level: 'BASIC' },
     }),
     prisma.membership.upsert({
       where: { name: 'Day Pass' },
-      update: { description: 'Single day access', minPrice: 50000 },
-      create: { name: 'Day Pass', description: 'Single day access', minPrice: 50000 },
+      update: { description: 'Single day access', minPrice: 50000, level: 'BASIC' },
+      create: { name: 'Day Pass', description: 'Single day access', minPrice: 50000, level: 'BASIC' },
     }),
   ]);
 
@@ -845,7 +845,137 @@ async function main() {
     ),
   );
 
-  // 7) Class bookings - create diverse bookings
+  // 7) Trainer Availabilities
+  // Helper to convert day name to dayOfWeek number
+  const dayNameToNumber = (day: string): number => {
+    const days: Record<string, number> = {
+      'Sunday': 0,
+      'Monday': 1,
+      'Tuesday': 2,
+      'Wednesday': 3,
+      'Thursday': 4,
+      'Friday': 5,
+      'Saturday': 6,
+    };
+    return days[day] ?? 0;
+  };
+
+  // Helper to create time from hours and minutes
+  const createTime = (hour: number, minute: number = 0): Date => {
+    const date = new Date();
+    date.setHours(hour, minute, 0, 0);
+    return date;
+  };
+
+  // Create trainer availabilities based on the trainer data
+  const trainerAvailabilities = [
+    // John Trainer (trainerUser) - Monday, Wednesday, Friday
+    { trainerId: trainerUser.id, day: 'Monday', startTime: createTime(9, 0), endTime: createTime(12, 0) },
+    { trainerId: trainerUser.id, day: 'Monday', startTime: createTime(14, 0), endTime: createTime(18, 0) },
+    { trainerId: trainerUser.id, day: 'Wednesday', startTime: createTime(9, 0), endTime: createTime(12, 0) },
+    { trainerId: trainerUser.id, day: 'Wednesday', startTime: createTime(14, 0), endTime: createTime(18, 0) },
+    { trainerId: trainerUser.id, day: 'Friday', startTime: createTime(9, 0), endTime: createTime(12, 0) },
+    { trainerId: trainerUser.id, day: 'Friday', startTime: createTime(14, 0), endTime: createTime(18, 0) },
+
+    // Sarah Johnson - Tuesday, Thursday, Saturday
+    { trainerId: trainers[0].id, day: 'Tuesday', startTime: createTime(6, 0), endTime: createTime(14, 0) },
+    { trainerId: trainers[0].id, day: 'Thursday', startTime: createTime(6, 0), endTime: createTime(14, 0) },
+    { trainerId: trainers[0].id, day: 'Saturday', startTime: createTime(8, 0), endTime: createTime(16, 0) },
+
+    // Mike Chen - Monday, Wednesday, Friday, Saturday
+    { trainerId: trainers[1].id, day: 'Monday', startTime: createTime(6, 0), endTime: createTime(10, 0) },
+    { trainerId: trainers[1].id, day: 'Wednesday', startTime: createTime(6, 0), endTime: createTime(10, 0) },
+    { trainerId: trainers[1].id, day: 'Friday', startTime: createTime(6, 0), endTime: createTime(10, 0) },
+    { trainerId: trainers[1].id, day: 'Saturday', startTime: createTime(10, 0), endTime: createTime(18, 0) },
+
+    // Emma Williams - Monday, Tuesday, Thursday, Sunday
+    { trainerId: trainers[2].id, day: 'Monday', startTime: createTime(17, 0), endTime: createTime(21, 0) },
+    { trainerId: trainers[2].id, day: 'Tuesday', startTime: createTime(17, 0), endTime: createTime(21, 0) },
+    { trainerId: trainers[2].id, day: 'Thursday', startTime: createTime(17, 0), endTime: createTime(21, 0) },
+    { trainerId: trainers[2].id, day: 'Sunday', startTime: createTime(9, 0), endTime: createTime(13, 0) },
+
+    // David Martinez - Tuesday, Thursday
+    { trainerId: trainers[3].id, day: 'Tuesday', startTime: createTime(9, 0), endTime: createTime(17, 0) },
+    { trainerId: trainers[3].id, day: 'Thursday', startTime: createTime(9, 0), endTime: createTime(17, 0) },
+
+    // Lisa Anderson - Monday, Wednesday, Friday
+    { trainerId: trainers[4].id, day: 'Monday', startTime: createTime(12, 0), endTime: createTime(20, 0) },
+    { trainerId: trainers[4].id, day: 'Wednesday', startTime: createTime(12, 0), endTime: createTime(20, 0) },
+    { trainerId: trainers[4].id, day: 'Friday', startTime: createTime(12, 0), endTime: createTime(20, 0) },
+  ];
+
+  // Create all trainer availability records
+  await Promise.all(
+    trainerAvailabilities.map((availability) =>
+      prisma.trainerAvailability.create({
+        data: {
+          trainerId: availability.trainerId,
+          dayOfWeek: dayNameToNumber(availability.day),
+          startTime: availability.startTime,
+          endTime: availability.endTime,
+          isAvailable: true,
+        },
+      }),
+    ),
+  );
+
+  console.log(`✅ Created ${trainerAvailabilities.length} trainer availability records`);
+
+  // Assign trainers to class schedules
+  await Promise.all([
+    // Assign trainers to morning classes
+    prisma.classSchedule.update({
+      where: { id: yogaBeginner.id },
+      data: { trainerId: trainers[0].id }, // Sarah Johnson - Tuesday morning
+    }),
+    prisma.classSchedule.update({
+      where: { id: hiit30.id },
+      data: { trainerId: trainers[1].id }, // Mike Chen - Monday morning
+    }),
+    prisma.classSchedule.update({
+      where: { id: spinning.id },
+      data: { trainerId: trainers[1].id }, // Mike Chen - Monday morning
+    }),
+    // Assign trainers to midday classes
+    prisma.classSchedule.update({
+      where: { id: pilates.id },
+      data: { trainerId: trainers[4].id }, // Lisa Anderson - Wednesday midday
+    }),
+    prisma.classSchedule.update({
+      where: { id: bodyPump.id },
+      data: { trainerId: trainerUser.id }, // John Trainer - Monday midday
+    }),
+    // Assign trainers to afternoon classes
+    prisma.classSchedule.update({
+      where: { id: strengthTraining.id },
+      data: { trainerId: trainers[3].id }, // David Martinez - Tuesday afternoon
+    }),
+    prisma.classSchedule.update({
+      where: { id: boxing.id },
+      data: { trainerId: trainerUser.id }, // John Trainer - Monday afternoon
+    }),
+    // Assign trainers to evening classes
+    prisma.classSchedule.update({
+      where: { id: yogaAdvanced.id },
+      data: { trainerId: trainers[2].id }, // Emma Williams - Monday evening
+    }),
+    prisma.classSchedule.update({
+      where: { id: zumba.id },
+      data: { trainerId: trainers[2].id }, // Emma Williams - Tuesday evening
+    }),
+    prisma.classSchedule.update({
+      where: { id: hiit45.id },
+      data: { trainerId: trainers[4].id }, // Lisa Anderson - Wednesday late evening
+    }),
+    prisma.classSchedule.update({
+      where: { id: crossfit.id },
+      data: { trainerId: trainers[1].id }, // Mike Chen - Saturday late evening
+    }),
+  ]);
+
+  console.log(`✅ Assigned trainers to class schedules`);
+
+  // 8) Class bookings - create diverse bookings
   const bookingStatuses = ['confirmed', 'pending', 'cancelled', 'completed'];
   
   // Helper function to get random date in the past/future
@@ -1172,6 +1302,7 @@ async function main() {
   console.log(`- Roles: ADMIN/STAFF/TRAINER/MEMBER`);
   console.log(`- Memberships: ${basicMembership.name}, ${premiumMembership.name}, ${vipMembership.name}, ${studentMembership.name}, ${seniorMembership.name}, ${dayPassMembership.name}`);
   console.log(`- Class Schedules: 12 different classes`);
+  console.log(`- Trainer Availabilities: 24 availability slots`);
   console.log(`- Class Bookings: ${classBookings.length} bookings created`);
   console.log(`- Admin: ${adminUser.email}`);
   console.log(`- Trainers: ${trainerUser.email} + ${trainers.length} more`);

@@ -15,6 +15,7 @@ import { AllExceptionsFilter } from './libs/filter/exception.filter';
 import { ClassScheduleModule } from './modules/class-schedule/class-schedule.module';
 import { ClassBookingModule } from './modules/class-booking/class-booking.module';
 import { TrainerModule } from './modules/trainer/trainer.module';
+import { MembershipsModule } from './modules/memberships/memberships.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { TrainerModule } from './modules/trainer/trainer.module';
     ClassScheduleModule,
     ClassBookingModule,
     TrainerModule,
+    MembershipsModule,
   ],
   controllers: [AppController],
   providers: [

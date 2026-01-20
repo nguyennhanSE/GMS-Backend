@@ -1,18 +1,33 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ClassBookingEntity } from './entities/class-booking.entity';
-import { CreateClassBookingDto, CreateMultipleClassBookingDto } from './dto/create-class-booking.dto';
+import {
+  CreateClassBookingDto,
+  CreateMultipleClassBookingDto,
+} from './dto/create-class-booking.dto';
 import { UpdateClassBookingDto } from './dto/update-class-booking.dto';
-import { ClassBookingRepository, ClassBookingFilterDto } from './repositories/class-booking.repository';
-import { IPaginate, PaginateOptions } from '../../libs/models/paginate/pagimate.model';
+import {
+  ClassBookingRepository,
+  ClassBookingFilterDto,
+} from './repositories/class-booking.repository';
+import {
+  IPaginate,
+  PaginateOptions,
+} from '../../libs/models/paginate/pagimate.model';
 import { ClassScheduleService } from '../class-schedule/class-schedule.service';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ClassBookingService {
   constructor(
-    private readonly classBookingRepository: ClassBookingRepository,  
+    private readonly classBookingRepository: ClassBookingRepository,
     private readonly classScheduleService: ClassScheduleService,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -21,30 +36,30 @@ export class ClassBookingService {
   private async checkTrainerAvailability(
     trainerId: string,
     classStartTime: Date,
-    classEndTime: Date
+    classEndTime: Date,
+    tx?: Prisma.TransactionClient,
   ): Promise<boolean> {
-    const dayOfWeek = classStartTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    
-    // Extract time components from the class schedule
+    const prismaClient = tx || this.prisma;
+    const dayOfWeek = classStartTime.getDay();
+
     const classStartHour = classStartTime.getHours();
     const classStartMinute = classStartTime.getMinutes();
     const classEndHour = classEndTime.getHours();
     const classEndMinute = classEndTime.getMinutes();
 
-    // Query trainer availability for that day of week
-    const trainerAvailabilities = await this.prisma.trainerAvailability.findMany({
-      where: {
-        trainerId: trainerId,
-        dayOfWeek: dayOfWeek,
-        isAvailable: true,
-      },
-    });
+    const trainerAvailabilities =
+      await prismaClient.trainerAvailability.findMany({
+        where: {
+          trainerId: trainerId,
+          dayOfWeek: dayOfWeek,
+          isAvailable: true,
+        },
+      });
 
     if (trainerAvailabilities.length === 0) {
-      return false; // Trainer not available on this day
+      return false;
     }
 
-    // Check if class time falls within any of the trainer's availability windows
     for (const availability of trainerAvailabilities) {
       const availStartTime = availability.startTime;
       const availEndTime = availability.endTime;
@@ -54,187 +69,171 @@ export class ClassBookingService {
       const availEndHour = availEndTime.getHours();
       const availEndMinute = availEndTime.getMinutes();
 
-      // Convert to minutes for easier comparison
       const classStartMinutes = classStartHour * 60 + classStartMinute;
       const classEndMinutes = classEndHour * 60 + classEndMinute;
       const availStartMinutes = availStartHour * 60 + availStartMinute;
       const availEndMinutes = availEndHour * 60 + availEndMinute;
 
-      // Check if class time is within availability window
-      if (classStartMinutes >= availStartMinutes && classEndMinutes <= availEndMinutes) {
+      if (
+        classStartMinutes >= availStartMinutes &&
+        classEndMinutes <= availEndMinutes
+      ) {
         return true;
       }
     }
 
-    return false; // Class time doesn't fall within any availability window
+    return false;
   }
 
   /**
-   * Check if there are conflicting bookings for the schedule or trainer
+   * Create a new class booking with full race condition protection
    */
-  private async checkScheduleConflicts(
-    scheduleId: string,
-    trainerId: string | null,
-    bookingStartDate: Date,
-    bookingEndDate: Date,
-    classStartTime: Date,
-    classEndTime: Date
-  ): Promise<void> {
-    // Check for overlapping bookings on the same schedule
-    const overlappingBookings = await this.prisma.classBooking.findMany({
-      where: {
-        classScheduleId: scheduleId,
-        status: { not: 'cancelled' },
-        OR: [
-          {
-            AND: [
-              { bookingStartDate: { lte: bookingStartDate } },
-              { bookingEndDate: { gte: bookingStartDate } },
-            ],
-          },
-          {
-            AND: [
-              { bookingStartDate: { lte: bookingEndDate } },
-              { bookingEndDate: { gte: bookingEndDate } },
-            ],
-          },
-          {
-            AND: [
-              { bookingStartDate: { gte: bookingStartDate } },
-              { bookingEndDate: { lte: bookingEndDate } },
-            ],
-          },
-        ],
-      },
-    });
-
-    if (overlappingBookings.length > 0) {
+  async create(
+    createClassBookingDto: CreateMultipleClassBookingDto,
+  ): Promise<ClassBookingEntity[]> {
+    // Validate dates
+    if (
+      createClassBookingDto?.bookingStartDate &&
+      createClassBookingDto?.bookingEndDate &&
+      createClassBookingDto.bookingStartDate >=
+        createClassBookingDto.bookingEndDate
+    ) {
       throw new BadRequestException(
-        `Schedule conflict: This class schedule already has bookings during the requested period`
+        'Booking start date must be before end date',
       );
     }
 
-    // If trainer is assigned, check for trainer conflicts across all schedules
-    if (trainerId) {
-      const trainerConflicts = await this.prisma.classBooking.findMany({
-        where: {
-          classSchedule: {
-            trainerId: trainerId,
-          },
-          status: { not: 'cancelled' },
-          OR: [
-            {
-              AND: [
-                { bookingStartDate: { lte: bookingStartDate } },
-                { bookingEndDate: { gte: bookingStartDate } },
-              ],
-            },
-            {
-              AND: [
-                { bookingStartDate: { lte: bookingEndDate } },
-                { bookingEndDate: { gte: bookingEndDate } },
-              ],
-            },
-            {
-              AND: [
-                { bookingStartDate: { gte: bookingStartDate } },
-                { bookingEndDate: { lte: bookingEndDate } },
-              ],
-            },
-          ],
-        },
-        include: {
-          classSchedule: true,
-        },
-      });
-
-      // Check if any of the conflicts overlap in time
-      for (const conflict of trainerConflicts) {
-        if (conflict.classSchedule) {
-          const conflictStart = conflict.classSchedule.classStartTime;
-          const conflictEnd = conflict.classSchedule.classEndTime;
-
-          // Check if times overlap (even on different dates)
-          const classStartMinutes = classStartTime.getHours() * 60 + classStartTime.getMinutes();
-          const classEndMinutes = classEndTime.getHours() * 60 + classEndTime.getMinutes();
-          const conflictStartMinutes = conflictStart.getHours() * 60 + conflictStart.getMinutes();
-          const conflictEndMinutes = conflictEnd.getHours() * 60 + conflictEnd.getMinutes();
-
-          // Check for time overlap
-          if (
-            (classStartMinutes < conflictEndMinutes && classEndMinutes > conflictStartMinutes)
-          ) {
-            throw new BadRequestException(
-              `Trainer conflict: This trainer is already assigned to another class during this time period`
-            );
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * Create a new class booking
-   */
-  async create(createClassBookingDto: CreateMultipleClassBookingDto): Promise<ClassBookingEntity[]> {
-    // Validate dates
-    if (createClassBookingDto?.bookingStartDate && createClassBookingDto?.bookingEndDate && createClassBookingDto.bookingStartDate >= createClassBookingDto.bookingEndDate) {
-      throw new BadRequestException('Booking start date must be before end date');
-    }
-    
     const wantedSchedules = createClassBookingDto.classScheduleId;
-    const createdBookings = await this.prisma.$transaction(async (tx) => {
-      // Validate all schedules exist and check availability
-      const schedulesData = await Promise.all(wantedSchedules.map(async (scheduleId) => {
-        const classSchedule = await this.classScheduleService.findOne(scheduleId);
-        if (!classSchedule) {
-          throw new NotFoundException(`Class schedule with id ${scheduleId} not found`);
-        }
+    const userId = createClassBookingDto.userId;
 
-        // Validate that class times are set
-        if (!classSchedule.classStartTime || !classSchedule.classEndTime) {
-          throw new BadRequestException(`Class schedule ${scheduleId} does not have start/end times set`);
-        }
+    // Use Serializable isolation level to prevent race conditions
+    const createdBookings = await this.prisma.$transaction(
+      async (tx) => {
+        const bookingsToCreate: ClassBookingEntity[] = [];
 
-        // Check trainer availability if trainer is assigned
-        if (classSchedule.trainerId) {
-          const isTrainerAvailable = await this.checkTrainerAvailability(
-            classSchedule.trainerId,
-            classSchedule.classStartTime,
-            classSchedule.classEndTime
-          );
+        for (const scheduleId of wantedSchedules) {
+          // ============================================
+          // 1. LOCK THE SCHEDULE ROW (FOR UPDATE)
+          // This prevents concurrent bookings from reading stale data
+          // ============================================
+          await tx.$queryRaw`
+          SELECT id FROM class_schedules 
+          WHERE id = ${scheduleId}::uuid 
+          FOR UPDATE
+        `;
 
-          if (!isTrainerAvailable) {
-            throw new BadRequestException(
-              `Trainer is not available for class schedule "${classSchedule.name}" at the scheduled time`
+          // Get the schedule with lock acquired
+          const classSchedule = await tx.classSchedule.findUnique({
+            where: { id: scheduleId },
+          });
+
+          if (!classSchedule) {
+            throw new NotFoundException(
+              `Class schedule with id ${scheduleId} not found`,
             );
           }
+
+          // ============================================
+          // 2. PAST DATE PROTECTION
+          // Cannot book classes that have already started
+          // ============================================
+          if (classSchedule.classStartTime < new Date()) {
+            throw new BadRequestException(
+              `Cannot book class "${classSchedule.name}" - it has already started or passed`,
+            );
+          }
+
+          // ============================================
+          // 3. SELF-BOOKING PREVENTION
+          // Trainers cannot book their own classes
+          // ============================================
+          if (classSchedule.trainerId && classSchedule.trainerId === userId) {
+            throw new BadRequestException(
+              `Trainers cannot book their own classes`,
+            );
+          }
+
+          // ============================================
+          // 4. DUPLICATE BOOKING CHECK
+          // User cannot book the same class multiple times
+          // ============================================
+          const existingBooking = await tx.classBooking.findFirst({
+            where: {
+              userId: userId,
+              classScheduleId: scheduleId,
+              status: { notIn: ['cancelled'] },
+            },
+          });
+
+          if (existingBooking) {
+            throw new BadRequestException(
+              `User already has an active booking for class "${classSchedule.name}"`,
+            );
+          }
+
+          // ============================================
+          // 5. CAPACITY CHECK
+          // Ensure we don't exceed maxCapacity
+          // ============================================
+          const currentBookingsCount = await tx.classBooking.count({
+            where: {
+              classScheduleId: scheduleId,
+              status: { in: ['pending', 'confirmed', 'attended'] },
+            },
+          });
+
+          if (currentBookingsCount >= classSchedule.maxCapacity) {
+            throw new BadRequestException(
+              `Class "${classSchedule.name}" is full (${currentBookingsCount}/${classSchedule.maxCapacity} spots taken)`,
+            );
+          }
+
+          // ============================================
+          // 6. TRAINER AVAILABILITY CHECK
+          // ============================================
+          if (classSchedule.trainerId) {
+            const isTrainerAvailable = await this.checkTrainerAvailability(
+              classSchedule.trainerId,
+              classSchedule.classStartTime,
+              classSchedule.classEndTime,
+              tx,
+            );
+
+            if (!isTrainerAvailable) {
+              throw new BadRequestException(
+                `Trainer is not available for class "${classSchedule.name}" at the scheduled time`,
+              );
+            }
+          }
+
+          // ============================================
+          // 7. CREATE BOOKING WITH FORCED PENDING STATUS
+          // ============================================
+          const newBooking = await tx.classBooking.create({
+            data: {
+              userId: userId,
+              classScheduleId: scheduleId,
+              bookingStartDate: createClassBookingDto.bookingStartDate!,
+              bookingEndDate: createClassBookingDto.bookingEndDate!,
+              status: 'pending', // Always start as pending
+            },
+            include: {
+              user: true,
+              classSchedule: true,
+            },
+          });
+
+          bookingsToCreate.push(newBooking as unknown as ClassBookingEntity);
         }
 
-        // Check for scheduling conflicts (both schedule and trainer conflicts)
-        await this.checkScheduleConflicts(
-          scheduleId,
-          classSchedule.trainerId || null,
-          createClassBookingDto.bookingStartDate!,
-          createClassBookingDto.bookingEndDate!,
-          classSchedule.classStartTime,
-          classSchedule.classEndTime
-        );
+        return bookingsToCreate;
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        timeout: 10000, // 10 second timeout
+      },
+    );
 
-        return classSchedule;
-      }));
-      
-      // Create the bookings
-      const bookings = await Promise.all(wantedSchedules.map(async (schedule) => {
-        return await this.classBookingRepository.create({
-          ...createClassBookingDto,
-          classScheduleId: schedule,
-        });
-      }));
-      
-      return bookings;
-    });
-    
     return createdBookings;
   }
 
@@ -244,7 +243,7 @@ export class ClassBookingService {
   async findAll(
     paginateRequest: PaginateOptions,
     filter: ClassBookingFilterDto,
-    options: { counted?: boolean }
+    options: { counted?: boolean },
   ): Promise<IPaginate<ClassBookingEntity>> {
     return this.classBookingRepository.getPaginate(filter, {
       ...paginateRequest,
@@ -273,96 +272,57 @@ export class ClassBookingService {
   /**
    * Get bookings by class schedule ID
    */
-  async findByClassScheduleId(classScheduleId: string): Promise<ClassBookingEntity[]> {
+  async findByClassScheduleId(
+    classScheduleId: string,
+  ): Promise<ClassBookingEntity[]> {
     return this.classBookingRepository.getByClassScheduleId(classScheduleId);
   }
 
   /**
-   * Update class booking
+   * Update class booking (only status can be changed)
    */
-  async update(id: string, updateClassBookingDto: UpdateClassBookingDto): Promise<ClassBookingEntity> {
+  async update(
+    id: string,
+    updateClassBookingDto: UpdateClassBookingDto,
+  ): Promise<ClassBookingEntity> {
     // Check if class booking exists
     const existingBooking = await this.findOne(id);
 
-    // Validate dates if both are provided
-    if (updateClassBookingDto.bookingStartDate && updateClassBookingDto.bookingEndDate) {
-      if (updateClassBookingDto.bookingStartDate >= updateClassBookingDto.bookingEndDate) {
-        throw new BadRequestException('Booking start date must be before end date');
-      }
-    }
-
-    // If schedule is being changed or dates are being changed, check availability
-    if (updateClassBookingDto.classScheduleId || updateClassBookingDto.bookingStartDate || updateClassBookingDto.bookingEndDate) {
-      const scheduleId = updateClassBookingDto.classScheduleId || existingBooking.classScheduleId;
-      const startDate = updateClassBookingDto.bookingStartDate || existingBooking.bookingStartDate;
-      const endDate = updateClassBookingDto.bookingEndDate || existingBooking.bookingEndDate;
-
-      if (!scheduleId) {
-        throw new BadRequestException('Class schedule ID is required');
-      }
-
-      const classSchedule = await this.classScheduleService.findOne(scheduleId);
-      
-      if (!classSchedule.classStartTime || !classSchedule.classEndTime) {
-        throw new BadRequestException(`Class schedule ${scheduleId} does not have start/end times set`);
-      }
-
-      // Check trainer availability if trainer is assigned
-      if (classSchedule.trainerId) {
-        const isTrainerAvailable = await this.checkTrainerAvailability(
-          classSchedule.trainerId,
-          classSchedule.classStartTime,
-          classSchedule.classEndTime
-        );
-
-        if (!isTrainerAvailable) {
-          throw new BadRequestException(
-            `Trainer is not available for class schedule "${classSchedule.name}" at the scheduled time`
-          );
-        }
-      }
-
-      // Check for conflicts (excluding the current booking)
-      const overlappingBookings = await this.prisma.classBooking.findMany({
-        where: {
-          id: { not: id },
-          classScheduleId: scheduleId,
-          status: { not: 'cancelled' },
-          OR: [
-            {
-              AND: [
-                { bookingStartDate: { lte: startDate } },
-                { bookingEndDate: { gte: startDate } },
-              ],
-            },
-            {
-              AND: [
-                { bookingStartDate: { lte: endDate } },
-                { bookingEndDate: { gte: endDate } },
-              ],
-            },
-            {
-              AND: [
-                { bookingStartDate: { gte: startDate } },
-                { bookingEndDate: { lte: endDate } },
-              ],
-            },
-          ],
-        },
-      });
-
-      if (overlappingBookings.length > 0) {
-        throw new BadRequestException(
-          `Schedule conflict: This class schedule already has bookings during the requested period`
-        );
-      }
-    }
-
+    // Only status updates are allowed (DTO enforces this)
     return this.classBookingRepository.update(id, updateClassBookingDto);
   }
 
   /**
-   * Remove class booking
+   * Cancel a class booking (soft delete by setting status to cancelled)
+   * Members can cancel their own bookings, admins can cancel any booking
+   */
+  async cancel(
+    id: string,
+    currentUserId: string,
+    isAdmin: boolean,
+  ): Promise<ClassBookingEntity> {
+    const booking = await this.findOne(id);
+
+    // Ownership check: non-admins can only cancel their own bookings
+    if (!isAdmin && booking.userId !== currentUserId) {
+      throw new ForbiddenException('You can only cancel your own bookings');
+    }
+
+    // Cannot cancel already cancelled bookings
+    if (booking.status === 'cancelled') {
+      throw new BadRequestException('This booking is already cancelled');
+    }
+
+    // Cannot cancel attended bookings
+    if (booking.status === 'attended') {
+      throw new BadRequestException('Cannot cancel an attended booking');
+    }
+
+    return this.classBookingRepository.update(id, { status: 'cancelled' });
+  }
+
+  /**
+   * Remove class booking (hard delete - admin only)
    */
   async remove(id: string): Promise<{ message: string }> {
     // Check if class booking exists

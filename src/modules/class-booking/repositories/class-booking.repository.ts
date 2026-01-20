@@ -1,11 +1,18 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
-import { PrismaService } from "prisma/prisma.service";
-import { ClassBookingEntity } from "../entities/class-booking.entity";
-import { CreateClassBookingDto } from "../dto/create-class-booking.dto";
-import { UpdateClassBookingDto } from "../dto/update-class-booking.dto";
-import { toClassBookingEntity, toClassBookingEntityWithRelations, toPrismaClassBookingCreateInput } from "../mapper/class-booking.mapper";
-import { IPaginate, PaginateOptions } from "../../../libs/models/paginate/pagimate.model";
-import { Prisma } from "@prisma/client";
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { ClassBookingEntity } from '../entities/class-booking.entity';
+import { CreateClassBookingDto } from '../dto/create-class-booking.dto';
+import { UpdateClassBookingDto } from '../dto/update-class-booking.dto';
+import {
+  toClassBookingEntity,
+  toClassBookingEntityWithRelations,
+  toPrismaClassBookingCreateInput,
+} from '../mapper/class-booking.mapper';
+import {
+  IPaginate,
+  PaginateOptions,
+} from '../../../libs/models/paginate/pagimate.model';
+import { Prisma } from '@prisma/client';
 
 export interface ClassBookingFilterDto {
   userId?: string;
@@ -22,7 +29,10 @@ export class ClassBookingRepository {
   /**
    * Get class booking by ID
    */
-  async getById(id: string, includeRelations = false): Promise<ClassBookingEntity | null> {
+  async getById(
+    id: string,
+    includeRelations = false,
+  ): Promise<ClassBookingEntity | null> {
     if (!id || id.trim() === '') {
       return null;
     }
@@ -36,21 +46,21 @@ export class ClassBookingRepository {
             classSchedule: true,
           },
         });
-        
+
         if (!classBooking) {
           return null;
         }
-        
+
         return toClassBookingEntityWithRelations(classBooking);
       } else {
         const classBooking = await this.prisma.classBooking.findUnique({
           where: { id: id.trim() },
         });
-        
+
         if (!classBooking) {
           return null;
         }
-        
+
         return toClassBookingEntity(classBooking);
       }
     } catch (error) {
@@ -70,14 +80,16 @@ export class ClassBookingRepository {
         classSchedule: true,
       },
     });
-    
+
     return classBookings.map(toClassBookingEntityWithRelations);
   }
 
   /**
    * Get class bookings by class schedule ID
    */
-  async getByClassScheduleId(classScheduleId: string): Promise<ClassBookingEntity[]> {
+  async getByClassScheduleId(
+    classScheduleId: string,
+  ): Promise<ClassBookingEntity[]> {
     const classBookings = await this.prisma.classBooking.findMany({
       where: { classScheduleId },
       include: {
@@ -85,7 +97,7 @@ export class ClassBookingRepository {
         classSchedule: true,
       },
     });
-    
+
     return classBookings.map(toClassBookingEntityWithRelations);
   }
 
@@ -105,9 +117,12 @@ export class ClassBookingRepository {
   }
 
   /**
-   * Update class booking
+   * Update class booking (only status can be changed)
    */
-  async update(id: string, updateDto: UpdateClassBookingDto): Promise<ClassBookingEntity> {
+  async update(
+    id: string,
+    updateDto: UpdateClassBookingDto,
+  ): Promise<ClassBookingEntity> {
     // Check if class booking exists
     const existing = await this.prisma.classBooking.findUnique({
       where: { id },
@@ -117,31 +132,11 @@ export class ClassBookingRepository {
       throw new BadRequestException(`ClassBooking with id ${id} not found`);
     }
 
-    // Prepare update data
+    // Only status updates are allowed
     const updateData: Prisma.ClassBookingUpdateInput = {};
-    
-    if (updateDto.userId !== undefined) {
-      updateData.user = {
-        connect: { id: updateDto.userId }
-      };
-    }
-    
-    if (updateDto.classScheduleId !== undefined) {
-      updateData.classSchedule = {
-        connect: { id: updateDto.classScheduleId }
-      };
-    }
-    
-    if (updateDto.bookingStartDate !== undefined) {
-      updateData.bookingStartDate = updateDto.bookingStartDate;
-    }
-    
-    if (updateDto.bookingEndDate !== undefined) {
-      updateData.bookingEndDate = updateDto.bookingEndDate;
-    }
-    
+
     if (updateDto.status !== undefined) {
-      updateData.status = updateDto.status || null;
+      updateData.status = updateDto.status;
     }
 
     // Update class booking
@@ -181,7 +176,7 @@ export class ClassBookingRepository {
    */
   async getPaginate(
     filter: ClassBookingFilterDto,
-    options: PaginateOptions
+    options: PaginateOptions,
   ): Promise<IPaginate<ClassBookingEntity>> {
     const page = options.page || 1;
     const limit = options.limit || 10;
@@ -216,28 +211,34 @@ export class ClassBookingRepository {
         // Search in status by default or filter by user/classSchedule name
         where.OR = [
           { status: { contains: search, mode: 'insensitive' } },
-          { 
+          {
             user: {
               OR: [
                 { firstName: { contains: search, mode: 'insensitive' } },
                 { lastName: { contains: search, mode: 'insensitive' } },
                 { email: { contains: search, mode: 'insensitive' } },
-              ]
-            }
+              ],
+            },
           },
           {
             classSchedule: {
-              name: { contains: search, mode: 'insensitive' }
-            }
-          }
+              name: { contains: search, mode: 'insensitive' },
+            },
+          },
         ];
       }
     }
 
     // Build orderBy
-    const allowedSortFields = ['id', 'bookingStartDate', 'bookingEndDate', 'createdAt', 'status'];
+    const allowedSortFields = [
+      'id',
+      'bookingStartDate',
+      'bookingEndDate',
+      'createdAt',
+      'status',
+    ];
     const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
-    
+
     let orderBy: Prisma.ClassBookingOrderByWithRelationInput;
     if (sortField === 'id') {
       orderBy = { id: sort };
@@ -308,4 +309,3 @@ export class ClassBookingRepository {
     }
   }
 }
-

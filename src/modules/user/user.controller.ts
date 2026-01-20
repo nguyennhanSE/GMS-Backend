@@ -1,10 +1,28 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseUUIDPipe, Req, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  ParseUUIDPipe,
+  Req,
+  ForbiddenException,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto, GetUsersQueryDto, UpdateUserDto } from './dto/user.dto';
 import { Roles } from '../../libs/decorator/roles.decorator';
 import { ERoleName } from '../roles/enums/role.enum';
 import { toResponse } from './mapper/user.mapper';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+} from '@nestjs/swagger';
 import { ResponseModel } from '../../libs/models/response/response.model';
 import { RolesService } from '../roles/roles.service';
 import { AssignRolesToSingleUserDto } from '../roles/dto/roles.dto';
@@ -17,14 +35,17 @@ import { TokenPayload } from 'src/libs/constants/interface';
 export class UserController {
   constructor(
     private readonly userService: UserService,
-    private readonly rolesService: RolesService
+    private readonly rolesService: RolesService,
   ) {}
 
-  @Post("create")
+  @Post('create')
   @Roles(ERoleName.ADMIN)
   @ApiOperation({ summary: 'Create a new user with role assignment' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request - validation error or user already exists' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request - validation error or user already exists',
+  })
   async create(@Body() createUserDto: CreateUserDto) {
     const responseModel = new ResponseModel();
 
@@ -47,33 +68,46 @@ export class UserController {
     const responseModel = new ResponseModel();
 
     try {
-      const { 
-        page, 
-        limit, 
-        sort, 
-        sortBy, 
-        counted, 
-        q: search, 
-        email, 
+      const {
+        page,
+        limit,
+        sort,
+        sortBy,
+        counted,
+        q: search,
+        email,
         searchField,
-        role
+        role,
       } = q;
 
-      const pageNum = page ? (typeof page === 'string' ? parseInt(page, 10) : page) : 1;
-      const limitNum = limit ? (typeof limit === 'string' ? parseInt(limit, 10) : limit) : 10;
+      const pageNum = page
+        ? typeof page === 'string'
+          ? parseInt(page, 10)
+          : page
+        : 1;
+      const limitNum = limit
+        ? typeof limit === 'string'
+          ? parseInt(limit, 10)
+          : limit
+        : 10;
 
       const data = await this.userService.getUserPaginate(
-        { 
-          page: pageNum, 
-          limit: limitNum, 
-          sort: sort || 'asc', 
-          sortBy: sortBy || 'createdAt' 
+        {
+          page: pageNum,
+          limit: limitNum,
+          sort: sort || 'asc',
+          sortBy: sortBy || 'createdAt',
         },
-        { q: search, email, searchField, role: role === 'ALL' ? undefined : role },
+        {
+          q: search,
+          email,
+          searchField,
+          role: role === 'ALL' ? undefined : role,
+        },
         { counted: counted ?? true },
       );
 
-      const docs = data.docs.map(e => toResponse(e));
+      const docs = data.docs.map((e) => toResponse(e));
 
       const result = { ...data, docs };
       responseModel.setData(result);
@@ -144,26 +178,32 @@ export class UserController {
   @Get(':userId/roles')
   @Roles(ERoleName.ADMIN)
   @ApiOperation({ summary: 'Get user roles' })
-  @ApiResponse({ status: 200, description: 'User roles retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'User roles retrieved successfully',
+  })
   async getUserRoles(
     @Param('userId') userId: string,
-    @Req() req: Request & { user?: TokenPayload }
+    @Req() req: Request & { user?: TokenPayload },
   ) {
     const responseModel = new ResponseModel();
     try {
       // Allow users to view their own roles
       const requestingUser = req.user;
-      if (requestingUser?.sub !== userId && !requestingUser?.roles?.includes(ERoleName.ADMIN)) {
+      if (
+        requestingUser?.sub !== userId &&
+        !requestingUser?.roles?.includes(ERoleName.ADMIN)
+      ) {
         throw new ForbiddenException('Cannot view other users roles');
       }
 
       const roles = await this.rolesService.getUserRoles(userId);
       const user = await this.userService.findOne(userId);
-      
+
       responseModel.setData({
         userId,
         userName: `${user.firstName} ${user.lastName}`.trim(),
-        roles: roles.map(name => ({ name }))
+        roles: roles.map((name) => ({ name })),
       });
     } catch (error) {
       throw error;
@@ -177,7 +217,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Roles assigned successfully' })
   async assignRolesToUser(
     @Param('userId') userId: string,
-    @Body() assignDto: AssignRolesToSingleUserDto
+    @Body() assignDto: AssignRolesToSingleUserDto,
   ) {
     const responseModel = new ResponseModel();
     try {
@@ -187,14 +227,16 @@ export class UserController {
       // Assign each role
       const results: any[] = [];
       for (const roleId of assignDto.roleIds) {
-        const result = await this.rolesService.assignRoleToUsers(roleId, { userIds: [userId] });
+        const result = await this.rolesService.assignRoleToUsers(roleId, {
+          userIds: [userId],
+        });
         results.push(result);
       }
 
       responseModel.setData({
         userId,
         assignedRoles: assignDto.roleIds.length,
-        results
+        results,
       });
     } catch (error) {
       throw error;
@@ -208,7 +250,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Role removed successfully' })
   async removeRoleFromUser(
     @Param('userId') userId: string,
-    @Param('roleId', ParseUUIDPipe) roleId: string
+    @Param('roleId', ParseUUIDPipe) roleId: string,
   ) {
     const responseModel = new ResponseModel();
     try {
@@ -228,7 +270,7 @@ export class UserController {
     @Param('roleId', ParseUUIDPipe) roleId: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-    @Query('search') search?: string
+    @Query('search') search?: string,
   ) {
     const responseModel = new ResponseModel();
     try {
@@ -236,7 +278,7 @@ export class UserController {
         roleId,
         page ? Number(page) : 1,
         limit ? Number(limit) : 20,
-        search
+        search,
       );
       responseModel.setData(result);
     } catch (error) {

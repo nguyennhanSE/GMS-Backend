@@ -9,7 +9,12 @@ import { ClassScheduleService } from '../class-schedule/class-schedule.service';
 @Module({
   imports: [ClassScheduleModule],
   controllers: [ClassBookingController],
-  providers: [ClassBookingService, ClassBookingRepository, PrismaService, ClassScheduleService],
+  providers: [
+    ClassBookingService,
+    ClassBookingRepository,
+    PrismaService,
+    ClassScheduleService,
+  ],
   exports: [ClassBookingService, ClassBookingRepository],
 })
 export class ClassBookingModule {}

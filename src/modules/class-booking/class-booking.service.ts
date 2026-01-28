@@ -19,6 +19,7 @@ import {
   PaginateOptions,
 } from '../../libs/models/paginate/pagimate.model';
 import { ClassScheduleService } from '../class-schedule/class-schedule.service';
+import { ScheduleExceptionService } from '../class-schedule/schedule-exception.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 
@@ -27,31 +28,32 @@ export class ClassBookingService {
   constructor(
     private readonly classBookingRepository: ClassBookingRepository,
     private readonly classScheduleService: ClassScheduleService,
+    private readonly scheduleExceptionService: ScheduleExceptionService,
     private readonly prisma: PrismaService,
   ) {}
 
   /**
    * Check if trainer is available for the given schedule
+   * Now uses startTime/endTime instead of classStartTime/classEndTime
    */
   private async checkTrainerAvailability(
     trainerId: string,
-    classStartTime: Date,
-    classEndTime: Date,
+    startTime: Date,
+    endTime: Date,
     tx?: Prisma.TransactionClient,
   ): Promise<boolean> {
     const prismaClient = tx || this.prisma;
-    const dayOfWeek = classStartTime.getDay();
+    const startHour = startTime.getHours();
+    const startMinute = startTime.getMinutes();
+    const endHour = endTime.getHours();
+    const endMinute = endTime.getMinutes();
 
-    const classStartHour = classStartTime.getHours();
-    const classStartMinute = classStartTime.getMinutes();
-    const classEndHour = classEndTime.getHours();
-    const classEndMinute = classEndTime.getMinutes();
-
+    // Get day of week from startTime (Time type stores as date, extract day)
+    // For recurring schedules, we use the DayOfWeek enum value
     const trainerAvailabilities =
       await prismaClient.trainerAvailability.findMany({
         where: {
           trainerId: trainerId,
-          dayOfWeek: dayOfWeek,
           isAvailable: true,
         },
       });
@@ -69,8 +71,8 @@ export class ClassBookingService {
       const availEndHour = availEndTime.getHours();
       const availEndMinute = availEndTime.getMinutes();
 
-      const classStartMinutes = classStartHour * 60 + classStartMinute;
-      const classEndMinutes = classEndHour * 60 + classEndMinute;
+      const classStartMinutes = startHour * 60 + startMinute;
+      const classEndMinutes = endHour * 60 + endMinute;
       const availStartMinutes = availStartHour * 60 + availStartMinute;
       const availEndMinutes = availEndHour * 60 + availEndMinute;
 
@@ -86,7 +88,66 @@ export class ClassBookingService {
   }
 
   /**
+   * Convert DayOfWeek enum to JS day number for date calculations
+   */
+  private dayOfWeekToNumber(dayOfWeek: string): number {
+    const mapping: Record<string, number> = {
+      SUN: 0,
+      MON: 1,
+      TUE: 2,
+      WED: 3,
+      THU: 4,
+      FRI: 5,
+      SAT: 6,
+    };
+    return mapping[dayOfWeek] ?? 0;
+  }
+
+  /**
+   * Convert JS day number to DayOfWeek enum string for error messages
+   */
+  private numberToDayOfWeek(dayNumber: number): string {
+    const mapping: Record<number, string> = {
+      0: 'SUN',
+      1: 'MON',
+      2: 'TUE',
+      3: 'WED',
+      4: 'THU',
+      5: 'FRI',
+      6: 'SAT',
+    };
+    return mapping[dayNumber] ?? 'UNKNOWN';
+  }
+
+  /**
+   * Check if schedule is valid (within validFrom/validUntil range and isActive)
+   */
+  private isScheduleValid(schedule: {
+    isActive: boolean;
+    validFrom: Date | null;
+    validUntil: Date | null;
+  }): boolean {
+    if (!schedule.isActive) {
+      return false;
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (schedule.validFrom && schedule.validFrom > today) {
+      return false;
+    }
+
+    if (schedule.validUntil && schedule.validUntil < today) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Create a new class booking with full race condition protection
+   * Updated for new schema with GymClass relation
    */
   async create(
     createClassBookingDto: CreateMultipleClassBookingDto,
@@ -122,9 +183,10 @@ export class ClassBookingService {
           FOR UPDATE
         `;
 
-          // Get the schedule with lock acquired
+          // Get the schedule with lock acquired, including gymClass relation
           const classSchedule = await tx.classSchedule.findUnique({
             where: { id: scheduleId },
+            include: { gymClass: true },
           });
 
           if (!classSchedule) {
@@ -133,21 +195,86 @@ export class ClassBookingService {
             );
           }
 
+          // Get class name from gymClass relation
+          const className = classSchedule.gymClass.className;
+
           // ============================================
-          // 2. PAST DATE PROTECTION
-          // Cannot book classes that have already started
+          // 2. SCHEDULE VALIDITY CHECK
+          // Check if schedule is active and within valid date range
           // ============================================
-          if (classSchedule.classStartTime < new Date()) {
+          if (!this.isScheduleValid(classSchedule)) {
             throw new BadRequestException(
-              `Cannot book class "${classSchedule.name}" - it has already started or passed`,
+              `Class "${className}" schedule is not currently active or valid`,
             );
+          }
+
+          // ============================================
+          // 2.1. DAY OF WEEK VALIDATION
+          // Booking date must match the schedule's recurring day
+          // Uses UTC to avoid timezone issues
+          // Supports both legacy dayOfWeek field and new scheduleDays relation
+          // ============================================
+          const bookingDate = new Date(createClassBookingDto.bookingStartDate!);
+          const bookingDayOfWeek = bookingDate.getUTCDay(); // 0=Sun, 1=Mon, etc.
+
+          // Get schedule days - prefer scheduleDays, fall back to legacy dayOfWeek
+          const scheduleDaysOfWeek: string[] = [];
+          if (
+            (classSchedule as any).scheduleDays &&
+            (classSchedule as any).scheduleDays.length > 0
+          ) {
+            for (const sd of (classSchedule as any).scheduleDays) {
+              scheduleDaysOfWeek.push(sd.dayOfWeek);
+            }
+          } else if (classSchedule.dayOfWeek) {
+            scheduleDaysOfWeek.push(classSchedule.dayOfWeek);
+          }
+
+          // Check if booking day matches any schedule day
+          const bookingDayName = this.numberToDayOfWeek(bookingDayOfWeek);
+          if (
+            scheduleDaysOfWeek.length > 0 &&
+            !scheduleDaysOfWeek.includes(bookingDayName)
+          ) {
+            const daysStr = scheduleDaysOfWeek.join(', ');
+            throw new BadRequestException(
+              `Class "${className}" is scheduled for ${daysStr} only. ` +
+                `The booking date falls on ${bookingDayName}.`,
+            );
+          }
+
+          // ============================================
+          // 2.2. EXCEPTION DATE CHECK
+          // Check if the booking date has a cancellation or rescheduling
+          // ============================================
+          const exception =
+            await this.scheduleExceptionService.getExceptionForDate(
+              scheduleId,
+              bookingDate,
+            );
+
+          if (exception) {
+            if (exception.type === 'CANCELLED') {
+              const reason = exception.reason ? ` (${exception.reason})` : '';
+              throw new BadRequestException(
+                `Class "${className}" is cancelled on ${bookingDate.toISOString().split('T')[0]}${reason}`,
+              );
+            } else if (exception.type === 'RESCHEDULED') {
+              const newTime = exception.newStartTime
+                ? ` to ${exception.newStartTime.toISOString().slice(11, 16)}-${exception.newEndTime?.toISOString().slice(11, 16)}`
+                : '';
+              throw new BadRequestException(
+                `Class "${className}" is rescheduled on ${bookingDate.toISOString().split('T')[0]}${newTime}. Please book for the new time slot.`,
+              );
+            }
           }
 
           // ============================================
           // 3. SELF-BOOKING PREVENTION
           // Trainers cannot book their own classes
+          // trainerId is now required (non-null)
           // ============================================
-          if (classSchedule.trainerId && classSchedule.trainerId === userId) {
+          if (classSchedule.trainerId === userId) {
             throw new BadRequestException(
               `Trainers cannot book their own classes`,
             );
@@ -167,13 +294,13 @@ export class ClassBookingService {
 
           if (existingBooking) {
             throw new BadRequestException(
-              `User already has an active booking for class "${classSchedule.name}"`,
+              `User already has an active booking for class "${className}"`,
             );
           }
 
           // ============================================
           // 5. CAPACITY CHECK
-          // Ensure we don't exceed maxCapacity
+          // Use 'capacity' instead of 'maxCapacity'
           // ============================================
           const currentBookingsCount = await tx.classBooking.count({
             where: {
@@ -182,28 +309,27 @@ export class ClassBookingService {
             },
           });
 
-          if (currentBookingsCount >= classSchedule.maxCapacity) {
+          if (currentBookingsCount >= classSchedule.capacity) {
             throw new BadRequestException(
-              `Class "${classSchedule.name}" is full (${currentBookingsCount}/${classSchedule.maxCapacity} spots taken)`,
+              `Class "${className}" is full (${currentBookingsCount}/${classSchedule.capacity} spots taken)`,
             );
           }
 
           // ============================================
           // 6. TRAINER AVAILABILITY CHECK
+          // trainerId is now required, use startTime/endTime
           // ============================================
-          if (classSchedule.trainerId) {
-            const isTrainerAvailable = await this.checkTrainerAvailability(
-              classSchedule.trainerId,
-              classSchedule.classStartTime,
-              classSchedule.classEndTime,
-              tx,
-            );
+          const isTrainerAvailable = await this.checkTrainerAvailability(
+            classSchedule.trainerId,
+            classSchedule.startTime,
+            classSchedule.endTime,
+            tx,
+          );
 
-            if (!isTrainerAvailable) {
-              throw new BadRequestException(
-                `Trainer is not available for class "${classSchedule.name}" at the scheduled time`,
-              );
-            }
+          if (!isTrainerAvailable) {
+            throw new BadRequestException(
+              `Trainer is not available for class "${className}" at the scheduled time`,
+            );
           }
 
           // ============================================
@@ -219,7 +345,9 @@ export class ClassBookingService {
             },
             include: {
               user: true,
-              classSchedule: true,
+              classSchedule: {
+                include: { gymClass: true },
+              },
             },
           });
 

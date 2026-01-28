@@ -8,14 +8,18 @@ type ClassBookingModel = Prisma.ClassBookingGetPayload<Record<string, never>>;
 type ClassBookingWithRelations = Prisma.ClassBookingGetPayload<{
   include: {
     user: true;
-    classSchedule: true;
+    classSchedule: {
+      include: { gymClass: true; scheduleDays: true };
+    };
   };
 }>;
 
 /**
  * Maps Prisma ClassBooking model to ClassBookingEntity
  */
-export function toClassBookingEntity(classBooking: ClassBookingModel): ClassBookingEntity {
+export function toClassBookingEntity(
+  classBooking: ClassBookingModel,
+): ClassBookingEntity {
   return {
     id: classBooking.id,
     userId: classBooking.userId || '',
@@ -31,7 +35,9 @@ export function toClassBookingEntity(classBooking: ClassBookingModel): ClassBook
 /**
  * Maps Prisma ClassBooking with relations to ClassBookingEntity
  */
-export function toClassBookingEntityWithRelations(classBooking: ClassBookingWithRelations): ClassBookingEntity {
+export function toClassBookingEntityWithRelations(
+  classBooking: ClassBookingWithRelations,
+): ClassBookingEntity {
   return {
     id: classBooking.id,
     userId: classBooking.userId || '',
@@ -42,31 +48,39 @@ export function toClassBookingEntityWithRelations(classBooking: ClassBookingWith
     createdAt: classBooking.createdAt,
     updatedAt: null,
     user: classBooking.user ? toUserEntity(classBooking.user) : null,
-    classSchedule: classBooking.classSchedule ? toClassScheduleEntity(classBooking.classSchedule) : null,
+    classSchedule: classBooking.classSchedule
+      ? toClassScheduleEntity(classBooking.classSchedule)
+      : null,
   };
 }
 
 /**
  * Maps CreateClassBookingDto to Prisma ClassBooking create input
  */
-export function toPrismaClassBookingCreateInput(dto: CreateClassBookingDto): Prisma.ClassBookingCreateInput {
+export function toPrismaClassBookingCreateInput(
+  dto: CreateClassBookingDto,
+): Prisma.ClassBookingCreateInput {
   return {
     bookingStartDate: dto.bookingStartDate || new Date(),
     bookingEndDate: dto.bookingEndDate || new Date(),
     status: dto.status || 'pending',
     user: {
-      connect: { id: dto.userId }
+      connect: { id: dto.userId },
     },
     classSchedule: {
-      connect: { id: dto.classScheduleId }
-    }
+      connect: { id: dto.classScheduleId },
+    },
   };
 }
 
 /**
  * Maps ClassBookingEntity to response DTO
+ * Now includes gymClass info from the schedule
  */
 export function toResponse(entity: ClassBookingEntity) {
+  const schedule = entity.classSchedule;
+  const gymClass = schedule?.gymClass;
+
   return {
     id: entity.id,
     userId: entity.userId,
@@ -75,17 +89,29 @@ export function toResponse(entity: ClassBookingEntity) {
     bookingEndDate: entity.bookingEndDate,
     status: entity.status,
     createdAt: entity.createdAt,
-    user: entity.user ? {
-      id: entity.user.id,
-      firstName: entity.user.firstName,
-      lastName: entity.user.lastName,
-      email: entity.user.email,
-    } : null,
-    classSchedule: entity.classSchedule ? {
-      id: entity.classSchedule.id,
-      name: entity.classSchedule.name,
-      description: entity.classSchedule.description,
-    } : null,
+    user: entity.user
+      ? {
+          id: entity.user.id,
+          firstName: entity.user.firstName,
+          lastName: entity.user.lastName,
+          email: entity.user.email,
+        }
+      : null,
+    classSchedule: schedule
+      ? {
+          id: schedule.id,
+          dayOfWeek: schedule.dayOfWeek,
+          startTime: schedule.startTime,
+          endTime: schedule.endTime,
+          location: schedule.location,
+          capacity: schedule.capacity,
+          trainerId: schedule.trainerId,
+          // Class info from gymClass relation
+          className: gymClass?.className ?? null,
+          description: gymClass?.description ?? null,
+          category: gymClass?.category ?? null,
+          difficultyLevel: gymClass?.difficultyLevel ?? null,
+        }
+      : null,
   };
 }
-

@@ -43,7 +43,7 @@ export class ClassBookingRepository {
           where: { id: id.trim() },
           include: {
             user: true,
-            classSchedule: true,
+            classSchedule: { include: { gymClass: true, scheduleDays: true } },
           },
         });
 
@@ -77,7 +77,7 @@ export class ClassBookingRepository {
       where: { userId },
       include: {
         user: true,
-        classSchedule: true,
+        classSchedule: { include: { gymClass: true, scheduleDays: true } },
       },
     });
 
@@ -94,7 +94,7 @@ export class ClassBookingRepository {
       where: { classScheduleId },
       include: {
         user: true,
-        classSchedule: true,
+        classSchedule: { include: { gymClass: true, scheduleDays: true } },
       },
     });
 
@@ -109,7 +109,7 @@ export class ClassBookingRepository {
       data: toPrismaClassBookingCreateInput(createDto),
       include: {
         user: true,
-        classSchedule: true,
+        classSchedule: { include: { gymClass: true, scheduleDays: true } },
       },
     });
 
@@ -145,7 +145,7 @@ export class ClassBookingRepository {
       data: updateData,
       include: {
         user: true,
-        classSchedule: true,
+        classSchedule: { include: { gymClass: true, scheduleDays: true } },
       },
     });
 
@@ -222,7 +222,9 @@ export class ClassBookingRepository {
           },
           {
             classSchedule: {
-              name: { contains: search, mode: 'insensitive' },
+              gymClass: {
+                className: { contains: search, mode: 'insensitive' },
+              },
             },
           },
         ];
@@ -266,7 +268,7 @@ export class ClassBookingRepository {
         take: limit,
         include: {
           user: true,
-          classSchedule: true,
+          classSchedule: { include: { gymClass: true, scheduleDays: true } },
         },
       }),
       counted ? this.prisma.classBooking.count({ where }) : Promise.resolve(0),

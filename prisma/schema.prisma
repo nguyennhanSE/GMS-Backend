@@ -185,24 +185,131 @@ model ClassBooking {
 }
 
 model ClassSchedule {
-  id String @id @default(uuid()) @db.Uuid
-  name String @unique
-  description String?
-  maxCapacity Int @default(20) @map("max_capacity")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+  id            String   @id @default(uuid()) @db.Uuid
+  classId       String   @map("class_id") @db.Uuid
+  trainerId     String   @map("trainer_id") @db.Uuid
+  
+  // Recurring schedule pattern - dayOfWeek kept for backward compatibility
+  // New schedules should use scheduleDays relation for multi-day support
+  dayOfWeek     DayOfWeek? @map("day_of_week")
+  startTime     DateTime @map("start_time") @db.Time
+  endTime       DateTime @map("end_time") @db.Time
+  
+  // Validity period
+  validFrom     DateTime? @map("valid_from") @db.Date
+  validUntil    DateTime? @map("valid_until") @db.Date
+  
+  // Capacity and location
+  location      String?  @db.VarChar(255)
+  capacity      Int      @default(20)
+  isActive      Boolean  @default(true) @map("is_active")
+  
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  classStartTime DateTime @map("class_start_time") @db.Timestamp(6)
-  classEndTime DateTime @map("class_end_time") @db.Timestamp(6)
-
-  trainerId String? @map("trainer_id") @db.Uuid
-  trainer User? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
-
+  // Relations
+  gymClass      GymClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+  trainer       User     @relation(fields: [trainerId], references: [id], onDelete: Restrict)
   classBookings ClassBooking[]
+  scheduleDays  ScheduleDay[]
+  scheduleExceptions ScheduleException[]
 
+  // Indexes
+  @@index([classId])
   @@index([trainerId])
+  @@index([dayOfWeek, startTime])
+  @@index([dayOfWeek, isActive, capacity])
   @@map("class_schedules")
 }
+
+// Junction table for multi-day schedules
+// Allows a single ClassSchedule to occur on multiple days (e.g., MON, WED, FRI)
+model ScheduleDay {
+  id          String    @id @default(uuid()) @db.Uuid
+  scheduleId  String    @map("schedule_id") @db.Uuid
+  dayOfWeek   DayOfWeek @map("day_of_week")
+  
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+
+  // Relations
+  schedule    ClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  // Unique constraint: same day cannot be added twice to same schedule
+  @@unique([scheduleId, dayOfWeek])
+  @@index([dayOfWeek])
+  @@index([scheduleId])
+  @@map("schedule_days")
+}
+
+// Exception dates for schedule (holidays, closures, rescheduling)
+// Allows marking specific dates as cancelled or rescheduled
+model ScheduleException {
+  id            String        @id @default(uuid()) @db.Uuid
+  scheduleId    String        @map("schedule_id") @db.Uuid
+  exceptionDate DateTime      @map("exception_date") @db.Date
+  type          ExceptionType @default(CANCELLED)
+  reason        String?       @db.VarChar(255)
+  
+  // For rescheduled exceptions - the new time for that specific date
+  newStartTime  DateTime?     @map("new_start_time") @db.Time
+  newEndTime    DateTime?     @map("new_end_time") @db.Time
+  
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime?     @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  // Relations
+  schedule      ClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  // Unique constraint: same date cannot have multiple exceptions for same schedule
+  @@unique([scheduleId, exceptionDate])
+  @@index([scheduleId])
+  @@index([exceptionDate])
+  @@map("schedule_exceptions")
+}
+
+// Exception types for schedule exceptions
+enum ExceptionType {
+  CANCELLED     // Class is cancelled on this date
+  RESCHEDULED   // Class is rescheduled to a different time on this date
+}
+
+// Class template/definition - stores class info without schedule details
+model GymClass {
+  id              String   @id @default(uuid()) @db.Uuid
+  className       String   @unique @map("class_name") @db.VarChar(100)
+  description     String?  @db.Text
+  difficultyLevel DifficultyLevel @default(Beginner) @map("difficulty_level")
+  category        String   @db.VarChar(50)
+  isActive        Boolean  @default(true) @map("is_active")
+  
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  // Relations
+  schedules       ClassSchedule[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("gym_classes")
+}
+
+// Enums for class management
+enum DayOfWeek {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+enum DifficultyLevel {
+  Beginner
+  Intermediate
+  Advanced
+}
+
 
 model TrainerAvailability {
   id String @id @default(uuid()) @db.Uuid

@@ -25,19 +25,7 @@ import { Roles } from '../../libs/decorator/roles.decorator';
 import { ERoleName } from '../roles/enums/role.enum';
 import { CurrentUser } from '../../libs/decorator/current-user.decorator';
 import type { RequestUser } from '../../libs/decorator/current-user.decorator';
-
-class GetClassBookingsQueryDto {
-  page?: string;
-  limit?: string;
-  sort?: 'asc' | 'desc';
-  sortBy?: string;
-  counted?: boolean;
-  userId?: string;
-  classScheduleId?: string;
-  status?: string;
-  q?: string;
-  searchField?: string;
-}
+import { GetClassBookingsQueryDto } from './dto/class-booking-query.dto';
 
 @ApiTags('Class Booking Management')
 @ApiBearerAuth()

@@ -23,10 +23,13 @@ const SEED_ADMIN_FIRST_NAME = process.env.SEED_ADMIN_FIRST_NAME || 'System';
 const SEED_ADMIN_LAST_NAME = process.env.SEED_ADMIN_LAST_NAME || 'Admin';
 
 const SEED_MEMBER_EMAIL = process.env.SEED_MEMBER_EMAIL || 'member@gym.local';
-const SEED_MEMBER_PASSWORD = process.env.SEED_MEMBER_PASSWORD || 'Member@123456';
+const SEED_MEMBER_PASSWORD =
+  process.env.SEED_MEMBER_PASSWORD || 'Member@123456';
 
-const SEED_TRAINER_EMAIL = process.env.SEED_TRAINER_EMAIL || 'trainer@gym.local';
-const SEED_TRAINER_PASSWORD = process.env.SEED_TRAINER_PASSWORD || 'Trainer@123456';
+const SEED_TRAINER_EMAIL =
+  process.env.SEED_TRAINER_EMAIL || 'trainer@gym.local';
+const SEED_TRAINER_PASSWORD =
+  process.env.SEED_TRAINER_PASSWORD || 'Trainer@123456';
 
 // Additional seed data
 const SEED_USERS_PASSWORD = 'Password@123456';
@@ -102,239 +105,312 @@ async function main() {
   ]);
 
   // 2) Memberships
-  const [basicMembership, premiumMembership, vipMembership, studentMembership, seniorMembership, dayPassMembership] = await Promise.all([
+  const [
+    basicMembership,
+    premiumMembership,
+    vipMembership,
+    studentMembership,
+    seniorMembership,
+    dayPassMembership,
+  ] = await Promise.all([
     prisma.membership.upsert({
       where: { name: 'Basic' },
-      update: { description: 'Access to gym during staffed hours', minPrice: 199000, level: 'BASIC' },
-      create: { name: 'Basic', description: 'Access to gym during staffed hours', minPrice: 199000, level: 'BASIC' },
+      update: {
+        description: 'Access to gym during staffed hours',
+        minPrice: 199000,
+        level: 'BASIC',
+      },
+      create: {
+        name: 'Basic',
+        description: 'Access to gym during staffed hours',
+        minPrice: 199000,
+        level: 'BASIC',
+      },
     }),
     prisma.membership.upsert({
       where: { name: 'Premium' },
-      update: { description: '24/7 access + group classes', minPrice: 399000, level: 'PREMIUM' },
-      create: { name: 'Premium', description: '24/7 access + group classes', minPrice: 399000, level: 'PREMIUM' },
+      update: {
+        description: '24/7 access + group classes',
+        minPrice: 399000,
+        level: 'PREMIUM',
+      },
+      create: {
+        name: 'Premium',
+        description: '24/7 access + group classes',
+        minPrice: 399000,
+        level: 'PREMIUM',
+      },
     }),
     prisma.membership.upsert({
       where: { name: 'VIP' },
-      update: { description: '24/7 access + all classes + personal training sessions', minPrice: 799000, level: 'ELITE' },
-      create: { name: 'VIP', description: '24/7 access + all classes + personal training sessions', minPrice: 799000, level: 'ELITE' },
+      update: {
+        description: '24/7 access + all classes + personal training sessions',
+        minPrice: 799000,
+        level: 'ELITE',
+      },
+      create: {
+        name: 'VIP',
+        description: '24/7 access + all classes + personal training sessions',
+        minPrice: 799000,
+        level: 'ELITE',
+      },
     }),
     prisma.membership.upsert({
       where: { name: 'Student' },
-      update: { description: 'Discounted membership for students with valid ID', minPrice: 149000, level: 'BASIC' },
-      create: { name: 'Student', description: 'Discounted membership for students with valid ID', minPrice: 149000, level: 'BASIC' },
+      update: {
+        description: 'Discounted membership for students with valid ID',
+        minPrice: 149000,
+        level: 'BASIC',
+      },
+      create: {
+        name: 'Student',
+        description: 'Discounted membership for students with valid ID',
+        minPrice: 149000,
+        level: 'BASIC',
+      },
     }),
     prisma.membership.upsert({
       where: { name: 'Senior' },
-      update: { description: 'Special rate for seniors 60+', minPrice: 129000, level: 'BASIC' },
-      create: { name: 'Senior', description: 'Special rate for seniors 60+', minPrice: 129000, level: 'BASIC' },
+      update: {
+        description: 'Special rate for seniors 60+',
+        minPrice: 129000,
+        level: 'BASIC',
+      },
+      create: {
+        name: 'Senior',
+        description: 'Special rate for seniors 60+',
+        minPrice: 129000,
+        level: 'BASIC',
+      },
     }),
     prisma.membership.upsert({
       where: { name: 'Day Pass' },
-      update: { description: 'Single day access', minPrice: 50000, level: 'BASIC' },
-      create: { name: 'Day Pass', description: 'Single day access', minPrice: 50000, level: 'BASIC' },
+      update: {
+        description: 'Single day access',
+        minPrice: 50000,
+        level: 'BASIC',
+      },
+      create: {
+        name: 'Day Pass',
+        description: 'Single day access',
+        minPrice: 50000,
+        level: 'BASIC',
+      },
     }),
   ]);
 
-  // 3) Class schedules with time slots (each 4 hours)
-  // Helper to create time slots with current date and specific hours
-  const createTimeSlot = (hour: number): { start: Date; end: Date } => {
-    const start = new Date(now);
-    start.setHours(hour, 0, 0, 0);
-    const end = new Date(now);
-    end.setHours(hour + 4, 0, 0, 0);
-    return { start, end };
-  };
-
-  const morningEarly = createTimeSlot(6);   // 6h-10h
-  const morningLate = createTimeSlot(7);    // 7h-11h
-  const afternoon = createTimeSlot(13);     // 13h-17h
-  const evening = createTimeSlot(17);       // 17h-21h
-  const midday = createTimeSlot(10);        // 10h-14h
-  const lateEvening = createTimeSlot(18);   // 18h-22h
+  // 3) Gym Classes (class templates/definitions)
+  const gymClasses = await Promise.all([
+    prisma.gymClass.upsert({
+      where: { className: 'Yoga - Beginner' },
+      update: {
+        description: 'Beginner-friendly yoga flow',
+        category: 'Yoga',
+        difficultyLevel: 'Beginner',
+      },
+      create: {
+        className: 'Yoga - Beginner',
+        description: 'Beginner-friendly yoga flow',
+        category: 'Yoga',
+        difficultyLevel: 'Beginner',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'Yoga - Advanced' },
+      update: {
+        description: 'Advanced yoga techniques and poses',
+        category: 'Yoga',
+        difficultyLevel: 'Advanced',
+      },
+      create: {
+        className: 'Yoga - Advanced',
+        description: 'Advanced yoga techniques and poses',
+        category: 'Yoga',
+        difficultyLevel: 'Advanced',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'HIIT - 30min' },
+      update: {
+        description: 'High intensity interval training',
+        category: 'Cardio',
+        difficultyLevel: 'Intermediate',
+      },
+      create: {
+        className: 'HIIT - 30min',
+        description: 'High intensity interval training',
+        category: 'Cardio',
+        difficultyLevel: 'Intermediate',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'HIIT - 45min' },
+      update: {
+        description: 'Extended high intensity interval training',
+        category: 'Cardio',
+        difficultyLevel: 'Advanced',
+      },
+      create: {
+        className: 'HIIT - 45min',
+        description: 'Extended high intensity interval training',
+        category: 'Cardio',
+        difficultyLevel: 'Advanced',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'Strength Training' },
+      update: {
+        description: 'Full-body strength session',
+        category: 'Strength',
+        difficultyLevel: 'Intermediate',
+      },
+      create: {
+        className: 'Strength Training',
+        description: 'Full-body strength session',
+        category: 'Strength',
+        difficultyLevel: 'Intermediate',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'Pilates' },
+      update: {
+        description: 'Core strengthening and flexibility',
+        category: 'Flexibility',
+        difficultyLevel: 'Beginner',
+      },
+      create: {
+        className: 'Pilates',
+        description: 'Core strengthening and flexibility',
+        category: 'Flexibility',
+        difficultyLevel: 'Beginner',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'Zumba' },
+      update: {
+        description: 'Dance fitness party',
+        category: 'Dance',
+        difficultyLevel: 'Beginner',
+      },
+      create: {
+        className: 'Zumba',
+        description: 'Dance fitness party',
+        category: 'Dance',
+        difficultyLevel: 'Beginner',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'Spinning' },
+      update: {
+        description: 'Indoor cycling workout',
+        category: 'Cardio',
+        difficultyLevel: 'Intermediate',
+      },
+      create: {
+        className: 'Spinning',
+        description: 'Indoor cycling workout',
+        category: 'Cardio',
+        difficultyLevel: 'Intermediate',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'Boxing' },
+      update: {
+        description: 'Cardio boxing and technique',
+        category: 'Combat',
+        difficultyLevel: 'Intermediate',
+      },
+      create: {
+        className: 'Boxing',
+        description: 'Cardio boxing and technique',
+        category: 'Combat',
+        difficultyLevel: 'Intermediate',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'CrossFit' },
+      update: {
+        description: 'Functional fitness workout',
+        category: 'Functional',
+        difficultyLevel: 'Advanced',
+      },
+      create: {
+        className: 'CrossFit',
+        description: 'Functional fitness workout',
+        category: 'Functional',
+        difficultyLevel: 'Advanced',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'Stretching & Mobility' },
+      update: {
+        description: 'Improve flexibility and recovery',
+        category: 'Flexibility',
+        difficultyLevel: 'Beginner',
+      },
+      create: {
+        className: 'Stretching & Mobility',
+        description: 'Improve flexibility and recovery',
+        category: 'Flexibility',
+        difficultyLevel: 'Beginner',
+      },
+    }),
+    prisma.gymClass.upsert({
+      where: { className: 'BodyPump' },
+      update: {
+        description: 'Barbell workout for full body',
+        category: 'Strength',
+        difficultyLevel: 'Intermediate',
+      },
+      create: {
+        className: 'BodyPump',
+        description: 'Barbell workout for full body',
+        category: 'Strength',
+        difficultyLevel: 'Intermediate',
+      },
+    }),
+  ]);
 
   const [
-    yogaBeginner,
-    yogaAdvanced,
-    hiit30,
-    hiit45,
-    strengthTraining,
-    pilates,
-    zumba,
-    spinning,
-    boxing,
-    crossfit,
-    stretching,
-    bodyPump,
-  ] = await Promise.all([
-    prisma.classSchedule.upsert({
-      where: { name: 'Yoga - Beginner' },
-      update: { 
-        description: 'Beginner-friendly yoga flow',
-        classStartTime: morningLate.start,
-        classEndTime: morningLate.end,
-      },
-      create: { 
-        name: 'Yoga - Beginner', 
-        description: 'Beginner-friendly yoga flow',
-        classStartTime: morningLate.start,
-        classEndTime: morningLate.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'Yoga - Advanced' },
-      update: { 
-        description: 'Advanced yoga techniques and poses',
-        classStartTime: evening.start,
-        classEndTime: evening.end,
-      },
-      create: { 
-        name: 'Yoga - Advanced', 
-        description: 'Advanced yoga techniques and poses',
-        classStartTime: evening.start,
-        classEndTime: evening.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'HIIT - 30min' },
-      update: { 
-        description: 'High intensity interval training',
-        classStartTime: morningEarly.start,
-        classEndTime: morningEarly.end,
-      },
-      create: { 
-        name: 'HIIT - 30min', 
-        description: 'High intensity interval training',
-        classStartTime: morningEarly.start,
-        classEndTime: morningEarly.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'HIIT - 45min' },
-      update: { 
-        description: 'Extended high intensity interval training',
-        classStartTime: lateEvening.start,
-        classEndTime: lateEvening.end,
-      },
-      create: { 
-        name: 'HIIT - 45min', 
-        description: 'Extended high intensity interval training',
-        classStartTime: lateEvening.start,
-        classEndTime: lateEvening.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'Strength Training' },
-      update: { 
-        description: 'Full-body strength session',
-        classStartTime: afternoon.start,
-        classEndTime: afternoon.end,
-      },
-      create: { 
-        name: 'Strength Training', 
-        description: 'Full-body strength session',
-        classStartTime: afternoon.start,
-        classEndTime: afternoon.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'Pilates' },
-      update: { 
-        description: 'Core strengthening and flexibility',
-        classStartTime: midday.start,
-        classEndTime: midday.end,
-      },
-      create: { 
-        name: 'Pilates', 
-        description: 'Core strengthening and flexibility',
-        classStartTime: midday.start,
-        classEndTime: midday.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'Zumba' },
-      update: { 
-        description: 'Dance fitness party',
-        classStartTime: evening.start,
-        classEndTime: evening.end,
-      },
-      create: { 
-        name: 'Zumba', 
-        description: 'Dance fitness party',
-        classStartTime: evening.start,
-        classEndTime: evening.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'Spinning' },
-      update: { 
-        description: 'Indoor cycling workout',
-        classStartTime: morningEarly.start,
-        classEndTime: morningEarly.end,
-      },
-      create: { 
-        name: 'Spinning', 
-        description: 'Indoor cycling workout',
-        classStartTime: morningEarly.start,
-        classEndTime: morningEarly.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'Boxing' },
-      update: { 
-        description: 'Cardio boxing and technique',
-        classStartTime: afternoon.start,
-        classEndTime: afternoon.end,
-      },
-      create: { 
-        name: 'Boxing', 
-        description: 'Cardio boxing and technique',
-        classStartTime: afternoon.start,
-        classEndTime: afternoon.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'CrossFit' },
-      update: { 
-        description: 'Functional fitness workout',
-        classStartTime: lateEvening.start,
-        classEndTime: lateEvening.end,
-      },
-      create: { 
-        name: 'CrossFit', 
-        description: 'Functional fitness workout',
-        classStartTime: lateEvening.start,
-        classEndTime: lateEvening.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'Stretching & Mobility' },
-      update: { 
-        description: 'Improve flexibility and recovery',
-        classStartTime: morningLate.start,
-        classEndTime: morningLate.end,
-      },
-      create: { 
-        name: 'Stretching & Mobility', 
-        description: 'Improve flexibility and recovery',
-        classStartTime: morningLate.start,
-        classEndTime: morningLate.end,
-      },
-    }),
-    prisma.classSchedule.upsert({
-      where: { name: 'BodyPump' },
-      update: { 
-        description: 'Barbell workout for full body',
-        classStartTime: midday.start,
-        classEndTime: midday.end,
-      },
-      create: { 
-        name: 'BodyPump', 
-        description: 'Barbell workout for full body',
-        classStartTime: midday.start,
-        classEndTime: midday.end,
-      },
-    }),
-  ]);
+    yogaBeginnerClass,
+    yogaAdvancedClass,
+    hiit30Class,
+    hiit45Class,
+    strengthTrainingClass,
+    pilatesClass,
+    zumbaClass,
+    spinningClass,
+    boxingClass,
+    crossfitClass,
+    stretchingClass,
+    bodyPumpClass,
+  ] = gymClasses;
+
+  console.log(`✅ Created ${gymClasses.length} gym class templates`);
+
+  // Helper to create time from hours and minutes (for schedule times)
+  const createTimeForSchedule = (hour: number, minute: number = 0): Date => {
+    const date = new Date();
+    date.setHours(hour, minute, 0, 0);
+    return date;
+  };
+
+  // Note: ClassSchedule creation now requires trainerId - we'll create schedules after users
+  // Store gym class IDs for later schedule creation
+  const gymClassIds = {
+    yogaBeginner: yogaBeginnerClass.id,
+    yogaAdvanced: yogaAdvancedClass.id,
+    hiit30: hiit30Class.id,
+    hiit45: hiit45Class.id,
+    strengthTraining: strengthTrainingClass.id,
+    pilates: pilatesClass.id,
+    zumba: zumbaClass.id,
+    spinning: spinningClass.id,
+    boxing: boxingClass.id,
+    crossfit: crossfitClass.id,
+    stretching: stretchingClass.id,
+    bodyPump: bodyPumpClass.id,
+  };
 
   // 4) Users (admin + sample member + sample trainer)
   const adminPasswordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 10);
@@ -347,7 +423,9 @@ async function main() {
       firstName: SEED_ADMIN_FIRST_NAME,
       lastName: SEED_ADMIN_LAST_NAME,
       // NOTE: don't overwrite password unless explicitly requested
-      ...(process.env.SEED_FORCE_UPDATE_PASSWORD === 'true' ? { password: adminPasswordHash } : {}),
+      ...(process.env.SEED_FORCE_UPDATE_PASSWORD === 'true'
+        ? { password: adminPasswordHash }
+        : {}),
       status: 'active',
     },
     create: {
@@ -364,7 +442,9 @@ async function main() {
     update: {
       firstName: 'Gym',
       lastName: 'Member',
-      ...(process.env.SEED_FORCE_UPDATE_PASSWORD === 'true' ? { password: memberPasswordHash } : {}),
+      ...(process.env.SEED_FORCE_UPDATE_PASSWORD === 'true'
+        ? { password: memberPasswordHash }
+        : {}),
       status: 'active',
     },
     create: {
@@ -383,7 +463,9 @@ async function main() {
     update: {
       firstName: 'John',
       lastName: 'Trainer',
-      ...(process.env.SEED_FORCE_UPDATE_PASSWORD === 'true' ? { password: trainerPasswordHash } : {}),
+      ...(process.env.SEED_FORCE_UPDATE_PASSWORD === 'true'
+        ? { password: trainerPasswordHash }
+        : {}),
       status: 'active',
     },
     create: {
@@ -736,19 +818,25 @@ async function main() {
       create: { userId: adminUser.id, roleId: adminRole.id },
     }),
     prisma.userRole.upsert({
-      where: { userId_roleId: { userId: memberUser.id, roleId: memberRole.id } },
+      where: {
+        userId_roleId: { userId: memberUser.id, roleId: memberRole.id },
+      },
       update: {},
       create: { userId: memberUser.id, roleId: memberRole.id },
     }),
     prisma.userRole.upsert({
-      where: { userId_roleId: { userId: trainerUser.id, roleId: trainerRole.id } },
+      where: {
+        userId_roleId: { userId: trainerUser.id, roleId: trainerRole.id },
+      },
       update: {},
       create: { userId: trainerUser.id, roleId: trainerRole.id },
     }),
     // Assign trainer role to all trainers
     ...trainers.map((trainer) =>
       prisma.userRole.upsert({
-        where: { userId_roleId: { userId: trainer.id, roleId: trainerRole.id } },
+        where: {
+          userId_roleId: { userId: trainer.id, roleId: trainerRole.id },
+        },
         update: {},
         create: { userId: trainer.id, roleId: trainerRole.id },
       }),
@@ -849,13 +937,13 @@ async function main() {
   // Helper to convert day name to dayOfWeek number
   const dayNameToNumber = (day: string): number => {
     const days: Record<string, number> = {
-      'Sunday': 0,
-      'Monday': 1,
-      'Tuesday': 2,
-      'Wednesday': 3,
-      'Thursday': 4,
-      'Friday': 5,
-      'Saturday': 6,
+      Sunday: 0,
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
     };
     return days[day] ?? 0;
   };
@@ -870,38 +958,148 @@ async function main() {
   // Create trainer availabilities based on the trainer data
   const trainerAvailabilities = [
     // John Trainer (trainerUser) - Monday, Wednesday, Friday
-    { trainerId: trainerUser.id, day: 'Monday', startTime: createTime(9, 0), endTime: createTime(12, 0) },
-    { trainerId: trainerUser.id, day: 'Monday', startTime: createTime(14, 0), endTime: createTime(18, 0) },
-    { trainerId: trainerUser.id, day: 'Wednesday', startTime: createTime(9, 0), endTime: createTime(12, 0) },
-    { trainerId: trainerUser.id, day: 'Wednesday', startTime: createTime(14, 0), endTime: createTime(18, 0) },
-    { trainerId: trainerUser.id, day: 'Friday', startTime: createTime(9, 0), endTime: createTime(12, 0) },
-    { trainerId: trainerUser.id, day: 'Friday', startTime: createTime(14, 0), endTime: createTime(18, 0) },
+    {
+      trainerId: trainerUser.id,
+      day: 'Monday',
+      startTime: createTime(9, 0),
+      endTime: createTime(12, 0),
+    },
+    {
+      trainerId: trainerUser.id,
+      day: 'Monday',
+      startTime: createTime(14, 0),
+      endTime: createTime(18, 0),
+    },
+    {
+      trainerId: trainerUser.id,
+      day: 'Wednesday',
+      startTime: createTime(9, 0),
+      endTime: createTime(12, 0),
+    },
+    {
+      trainerId: trainerUser.id,
+      day: 'Wednesday',
+      startTime: createTime(14, 0),
+      endTime: createTime(18, 0),
+    },
+    {
+      trainerId: trainerUser.id,
+      day: 'Friday',
+      startTime: createTime(9, 0),
+      endTime: createTime(12, 0),
+    },
+    {
+      trainerId: trainerUser.id,
+      day: 'Friday',
+      startTime: createTime(14, 0),
+      endTime: createTime(18, 0),
+    },
 
     // Sarah Johnson - Tuesday, Thursday, Saturday
-    { trainerId: trainers[0].id, day: 'Tuesday', startTime: createTime(6, 0), endTime: createTime(14, 0) },
-    { trainerId: trainers[0].id, day: 'Thursday', startTime: createTime(6, 0), endTime: createTime(14, 0) },
-    { trainerId: trainers[0].id, day: 'Saturday', startTime: createTime(8, 0), endTime: createTime(16, 0) },
+    {
+      trainerId: trainers[0].id,
+      day: 'Tuesday',
+      startTime: createTime(6, 0),
+      endTime: createTime(14, 0),
+    },
+    {
+      trainerId: trainers[0].id,
+      day: 'Thursday',
+      startTime: createTime(6, 0),
+      endTime: createTime(14, 0),
+    },
+    {
+      trainerId: trainers[0].id,
+      day: 'Saturday',
+      startTime: createTime(8, 0),
+      endTime: createTime(16, 0),
+    },
 
     // Mike Chen - Monday, Wednesday, Friday, Saturday
-    { trainerId: trainers[1].id, day: 'Monday', startTime: createTime(6, 0), endTime: createTime(10, 0) },
-    { trainerId: trainers[1].id, day: 'Wednesday', startTime: createTime(6, 0), endTime: createTime(10, 0) },
-    { trainerId: trainers[1].id, day: 'Friday', startTime: createTime(6, 0), endTime: createTime(10, 0) },
-    { trainerId: trainers[1].id, day: 'Saturday', startTime: createTime(10, 0), endTime: createTime(18, 0) },
+    {
+      trainerId: trainers[1].id,
+      day: 'Monday',
+      startTime: createTime(6, 0),
+      endTime: createTime(10, 0),
+    },
+    {
+      trainerId: trainers[1].id,
+      day: 'Wednesday',
+      startTime: createTime(6, 0),
+      endTime: createTime(10, 0),
+    },
+    {
+      trainerId: trainers[1].id,
+      day: 'Friday',
+      startTime: createTime(6, 0),
+      endTime: createTime(10, 0),
+    },
+    {
+      trainerId: trainers[1].id,
+      day: 'Saturday',
+      startTime: createTime(10, 0),
+      endTime: createTime(18, 0),
+    },
 
     // Emma Williams - Monday, Tuesday, Thursday, Sunday
-    { trainerId: trainers[2].id, day: 'Monday', startTime: createTime(17, 0), endTime: createTime(21, 0) },
-    { trainerId: trainers[2].id, day: 'Tuesday', startTime: createTime(17, 0), endTime: createTime(21, 0) },
-    { trainerId: trainers[2].id, day: 'Thursday', startTime: createTime(17, 0), endTime: createTime(21, 0) },
-    { trainerId: trainers[2].id, day: 'Sunday', startTime: createTime(9, 0), endTime: createTime(13, 0) },
+    {
+      trainerId: trainers[2].id,
+      day: 'Monday',
+      startTime: createTime(17, 0),
+      endTime: createTime(21, 0),
+    },
+    {
+      trainerId: trainers[2].id,
+      day: 'Tuesday',
+      startTime: createTime(17, 0),
+      endTime: createTime(21, 0),
+    },
+    {
+      trainerId: trainers[2].id,
+      day: 'Thursday',
+      startTime: createTime(17, 0),
+      endTime: createTime(21, 0),
+    },
+    {
+      trainerId: trainers[2].id,
+      day: 'Sunday',
+      startTime: createTime(9, 0),
+      endTime: createTime(13, 0),
+    },
 
     // David Martinez - Tuesday, Thursday
-    { trainerId: trainers[3].id, day: 'Tuesday', startTime: createTime(9, 0), endTime: createTime(17, 0) },
-    { trainerId: trainers[3].id, day: 'Thursday', startTime: createTime(9, 0), endTime: createTime(17, 0) },
+    {
+      trainerId: trainers[3].id,
+      day: 'Tuesday',
+      startTime: createTime(9, 0),
+      endTime: createTime(17, 0),
+    },
+    {
+      trainerId: trainers[3].id,
+      day: 'Thursday',
+      startTime: createTime(9, 0),
+      endTime: createTime(17, 0),
+    },
 
     // Lisa Anderson - Monday, Wednesday, Friday
-    { trainerId: trainers[4].id, day: 'Monday', startTime: createTime(12, 0), endTime: createTime(20, 0) },
-    { trainerId: trainers[4].id, day: 'Wednesday', startTime: createTime(12, 0), endTime: createTime(20, 0) },
-    { trainerId: trainers[4].id, day: 'Friday', startTime: createTime(12, 0), endTime: createTime(20, 0) },
+    {
+      trainerId: trainers[4].id,
+      day: 'Monday',
+      startTime: createTime(12, 0),
+      endTime: createTime(20, 0),
+    },
+    {
+      trainerId: trainers[4].id,
+      day: 'Wednesday',
+      startTime: createTime(12, 0),
+      endTime: createTime(20, 0),
+    },
+    {
+      trainerId: trainers[4].id,
+      day: 'Friday',
+      startTime: createTime(12, 0),
+      endTime: createTime(20, 0),
+    },
   ];
 
   // Create all trainer availability records
@@ -919,65 +1117,179 @@ async function main() {
     ),
   );
 
-  console.log(`✅ Created ${trainerAvailabilities.length} trainer availability records`);
+  console.log(
+    `✅ Created ${trainerAvailabilities.length} trainer availability records`,
+  );
 
-  // Assign trainers to class schedules
-  await Promise.all([
-    // Assign trainers to morning classes
-    prisma.classSchedule.update({
-      where: { id: yogaBeginner.id },
-      data: { trainerId: trainers[0].id }, // Sarah Johnson - Tuesday morning
+  // 7b) Create Class Schedules (now with required trainerId and DayOfWeek enum)
+  // ClassSchedule uses DayOfWeek enum: MON, TUE, WED, THU, FRI, SAT, SUN
+  const classSchedules = await Promise.all([
+    // Yoga - Beginner: Tuesday 7:00-8:00 with Sarah Johnson
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.yogaBeginner,
+        trainerId: trainers[0].id,
+        dayOfWeek: 'TUE',
+        startTime: createTimeForSchedule(7, 0),
+        endTime: createTimeForSchedule(8, 0),
+        location: 'Studio A',
+        capacity: 20,
+      },
     }),
-    prisma.classSchedule.update({
-      where: { id: hiit30.id },
-      data: { trainerId: trainers[1].id }, // Mike Chen - Monday morning
+    // Yoga - Advanced: Monday 17:00-18:30 with Emma Williams
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.yogaAdvanced,
+        trainerId: trainers[2].id,
+        dayOfWeek: 'MON',
+        startTime: createTimeForSchedule(17, 0),
+        endTime: createTimeForSchedule(18, 30),
+        location: 'Studio A',
+        capacity: 15,
+      },
     }),
-    prisma.classSchedule.update({
-      where: { id: spinning.id },
-      data: { trainerId: trainers[1].id }, // Mike Chen - Monday morning
+    // HIIT 30min: Monday 6:00-6:30 with Mike Chen
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.hiit30,
+        trainerId: trainers[1].id,
+        dayOfWeek: 'MON',
+        startTime: createTimeForSchedule(6, 0),
+        endTime: createTimeForSchedule(6, 30),
+        location: 'Main Floor',
+        capacity: 25,
+      },
     }),
-    // Assign trainers to midday classes
-    prisma.classSchedule.update({
-      where: { id: pilates.id },
-      data: { trainerId: trainers[4].id }, // Lisa Anderson - Wednesday midday
+    // HIIT 45min: Wednesday 18:00-18:45 with Lisa Anderson
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.hiit45,
+        trainerId: trainers[4].id,
+        dayOfWeek: 'WED',
+        startTime: createTimeForSchedule(18, 0),
+        endTime: createTimeForSchedule(18, 45),
+        location: 'Main Floor',
+        capacity: 25,
+      },
     }),
-    prisma.classSchedule.update({
-      where: { id: bodyPump.id },
-      data: { trainerId: trainerUser.id }, // John Trainer - Monday midday
+    // Strength Training: Tuesday 14:00-15:00 with David Martinez
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.strengthTraining,
+        trainerId: trainers[3].id,
+        dayOfWeek: 'TUE',
+        startTime: createTimeForSchedule(14, 0),
+        endTime: createTimeForSchedule(15, 0),
+        location: 'Weight Room',
+        capacity: 12,
+      },
     }),
-    // Assign trainers to afternoon classes
-    prisma.classSchedule.update({
-      where: { id: strengthTraining.id },
-      data: { trainerId: trainers[3].id }, // David Martinez - Tuesday afternoon
+    // Pilates: Wednesday 10:00-11:00 with Lisa Anderson
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.pilates,
+        trainerId: trainers[4].id,
+        dayOfWeek: 'WED',
+        startTime: createTimeForSchedule(10, 0),
+        endTime: createTimeForSchedule(11, 0),
+        location: 'Studio B',
+        capacity: 15,
+      },
     }),
-    prisma.classSchedule.update({
-      where: { id: boxing.id },
-      data: { trainerId: trainerUser.id }, // John Trainer - Monday afternoon
+    // Zumba: Tuesday 18:00-19:00 with Emma Williams
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.zumba,
+        trainerId: trainers[2].id,
+        dayOfWeek: 'TUE',
+        startTime: createTimeForSchedule(18, 0),
+        endTime: createTimeForSchedule(19, 0),
+        location: 'Studio A',
+        capacity: 30,
+      },
     }),
-    // Assign trainers to evening classes
-    prisma.classSchedule.update({
-      where: { id: yogaAdvanced.id },
-      data: { trainerId: trainers[2].id }, // Emma Williams - Monday evening
+    // Spinning: Monday 6:30-7:30 with Mike Chen
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.spinning,
+        trainerId: trainers[1].id,
+        dayOfWeek: 'MON',
+        startTime: createTimeForSchedule(6, 30),
+        endTime: createTimeForSchedule(7, 30),
+        location: 'Spin Room',
+        capacity: 20,
+      },
     }),
-    prisma.classSchedule.update({
-      where: { id: zumba.id },
-      data: { trainerId: trainers[2].id }, // Emma Williams - Tuesday evening
+    // Boxing: Monday 14:00-15:00 with John Trainer
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.boxing,
+        trainerId: trainerUser.id,
+        dayOfWeek: 'MON',
+        startTime: createTimeForSchedule(14, 0),
+        endTime: createTimeForSchedule(15, 0),
+        location: 'Boxing Ring',
+        capacity: 10,
+      },
     }),
-    prisma.classSchedule.update({
-      where: { id: hiit45.id },
-      data: { trainerId: trainers[4].id }, // Lisa Anderson - Wednesday late evening
+    // CrossFit: Saturday 18:00-19:00 with Mike Chen
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.crossfit,
+        trainerId: trainers[1].id,
+        dayOfWeek: 'SAT',
+        startTime: createTimeForSchedule(18, 0),
+        endTime: createTimeForSchedule(19, 0),
+        location: 'CrossFit Zone',
+        capacity: 15,
+      },
     }),
-    prisma.classSchedule.update({
-      where: { id: crossfit.id },
-      data: { trainerId: trainers[1].id }, // Mike Chen - Saturday late evening
+    // Stretching: Friday 7:00-7:30 with John Trainer
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.stretching,
+        trainerId: trainerUser.id,
+        dayOfWeek: 'FRI',
+        startTime: createTimeForSchedule(7, 0),
+        endTime: createTimeForSchedule(7, 30),
+        location: 'Studio B',
+        capacity: 20,
+      },
+    }),
+    // BodyPump: Monday 10:00-11:00 with John Trainer
+    prisma.classSchedule.create({
+      data: {
+        classId: gymClassIds.bodyPump,
+        trainerId: trainerUser.id,
+        dayOfWeek: 'MON',
+        startTime: createTimeForSchedule(10, 0),
+        endTime: createTimeForSchedule(11, 0),
+        location: 'Weight Room',
+        capacity: 20,
+      },
     }),
   ]);
 
-  console.log(`✅ Assigned trainers to class schedules`);
+  const [
+    yogaBeginnerSchedule,
+    yogaAdvancedSchedule,
+    hiit30Schedule,
+    hiit45Schedule,
+    strengthTrainingSchedule,
+    pilatesSchedule,
+    zumbaSchedule,
+    spinningSchedule,
+    boxingSchedule,
+    crossfitSchedule,
+    stretchingSchedule,
+    bodyPumpSchedule,
+  ] = classSchedules;
+
+  console.log(`✅ Created ${classSchedules.length} class schedules`);
 
   // 8) Class bookings - create diverse bookings
   const bookingStatuses = ['confirmed', 'pending', 'cancelled', 'completed'];
-  
+
   // Helper function to get random date in the past/future
   const getDateOffset = (daysOffset: number): Date => {
     const date = new Date(now);
@@ -990,300 +1302,300 @@ async function main() {
     // Past completed bookings
     {
       userId: members[0].id,
-      classScheduleId: yogaBeginner.id,
+      classScheduleId: yogaBeginnerSchedule.id,
       bookingStartDate: getDateOffset(-10),
       bookingEndDate: getDateOffset(-10),
       status: 'completed',
     },
     {
       userId: members[1].id,
-      classScheduleId: hiit30.id,
+      classScheduleId: hiit30Schedule.id,
       bookingStartDate: getDateOffset(-8),
       bookingEndDate: getDateOffset(-8),
       status: 'completed',
     },
     {
       userId: members[2].id,
-      classScheduleId: strengthTraining.id,
+      classScheduleId: strengthTrainingSchedule.id,
       bookingStartDate: getDateOffset(-5),
       bookingEndDate: getDateOffset(-5),
       status: 'completed',
     },
-    
+
     // Recent bookings
     {
       userId: members[3].id,
-      classScheduleId: pilates.id,
+      classScheduleId: pilatesSchedule.id,
       bookingStartDate: getDateOffset(-2),
       bookingEndDate: getDateOffset(-2),
       status: 'completed',
     },
     {
       userId: members[4].id,
-      classScheduleId: zumba.id,
+      classScheduleId: zumbaSchedule.id,
       bookingStartDate: getDateOffset(-1),
       bookingEndDate: getDateOffset(-1),
       status: 'completed',
     },
-    
+
     // Today's bookings
     {
       userId: memberUser.id,
-      classScheduleId: yogaBeginner.id,
+      classScheduleId: yogaBeginnerSchedule.id,
       bookingStartDate: now,
       bookingEndDate: now,
       status: 'confirmed',
     },
     {
       userId: members[5].id,
-      classScheduleId: spinning.id,
+      classScheduleId: spinningSchedule.id,
       bookingStartDate: now,
       bookingEndDate: now,
       status: 'confirmed',
     },
     {
       userId: members[6].id,
-      classScheduleId: hiit45.id,
+      classScheduleId: hiit45Schedule.id,
       bookingStartDate: now,
       bookingEndDate: now,
       status: 'confirmed',
     },
-    
+
     // Upcoming bookings - tomorrow
     {
       userId: members[7].id,
-      classScheduleId: boxing.id,
+      classScheduleId: boxingSchedule.id,
       bookingStartDate: getDateOffset(1),
       bookingEndDate: getDateOffset(1),
       status: 'confirmed',
     },
     {
       userId: members[8].id,
-      classScheduleId: crossfit.id,
+      classScheduleId: crossfitSchedule.id,
       bookingStartDate: getDateOffset(1),
       bookingEndDate: getDateOffset(1),
       status: 'confirmed',
     },
     {
       userId: members[9].id,
-      classScheduleId: yogaAdvanced.id,
+      classScheduleId: yogaAdvancedSchedule.id,
       bookingStartDate: getDateOffset(1),
       bookingEndDate: getDateOffset(1),
       status: 'pending',
     },
-    
+
     // Upcoming bookings - next few days
     {
       userId: members[10].id,
-      classScheduleId: stretching.id,
+      classScheduleId: stretchingSchedule.id,
       bookingStartDate: getDateOffset(2),
       bookingEndDate: getDateOffset(2),
       status: 'confirmed',
     },
     {
       userId: members[11].id,
-      classScheduleId: bodyPump.id,
+      classScheduleId: bodyPumpSchedule.id,
       bookingStartDate: getDateOffset(3),
       bookingEndDate: getDateOffset(3),
       status: 'confirmed',
     },
     {
       userId: members[12].id,
-      classScheduleId: yogaBeginner.id,
+      classScheduleId: yogaBeginnerSchedule.id,
       bookingStartDate: getDateOffset(4),
       bookingEndDate: getDateOffset(4),
       status: 'confirmed',
     },
     {
       userId: members[13].id,
-      classScheduleId: hiit30.id,
+      classScheduleId: hiit30Schedule.id,
       bookingStartDate: getDateOffset(5),
       bookingEndDate: getDateOffset(5),
       status: 'pending',
     },
     {
       userId: members[14].id,
-      classScheduleId: strengthTraining.id,
+      classScheduleId: strengthTrainingSchedule.id,
       bookingStartDate: getDateOffset(6),
       bookingEndDate: getDateOffset(6),
       status: 'confirmed',
     },
-    
+
     // Week ahead bookings
     {
       userId: members[0].id,
-      classScheduleId: pilates.id,
+      classScheduleId: pilatesSchedule.id,
       bookingStartDate: getDateOffset(7),
       bookingEndDate: getDateOffset(7),
       status: 'confirmed',
     },
     {
       userId: members[1].id,
-      classScheduleId: zumba.id,
+      classScheduleId: zumbaSchedule.id,
       bookingStartDate: getDateOffset(8),
       bookingEndDate: getDateOffset(8),
       status: 'confirmed',
     },
     {
       userId: members[2].id,
-      classScheduleId: spinning.id,
+      classScheduleId: spinningSchedule.id,
       bookingStartDate: getDateOffset(9),
       bookingEndDate: getDateOffset(9),
       status: 'confirmed',
     },
     {
       userId: members[3].id,
-      classScheduleId: boxing.id,
+      classScheduleId: boxingSchedule.id,
       bookingStartDate: getDateOffset(10),
       bookingEndDate: getDateOffset(10),
       status: 'pending',
     },
     {
       userId: members[4].id,
-      classScheduleId: crossfit.id,
+      classScheduleId: crossfitSchedule.id,
       bookingStartDate: getDateOffset(11),
       bookingEndDate: getDateOffset(11),
       status: 'confirmed',
     },
-    
+
     // Cancelled bookings (various dates)
     {
       userId: members[5].id,
-      classScheduleId: yogaAdvanced.id,
+      classScheduleId: yogaAdvancedSchedule.id,
       bookingStartDate: getDateOffset(-3),
       bookingEndDate: getDateOffset(-3),
       status: 'cancelled',
     },
     {
       userId: members[6].id,
-      classScheduleId: hiit45.id,
+      classScheduleId: hiit45Schedule.id,
       bookingStartDate: getDateOffset(3),
       bookingEndDate: getDateOffset(3),
       status: 'cancelled',
     },
     {
       userId: members[7].id,
-      classScheduleId: stretching.id,
+      classScheduleId: stretchingSchedule.id,
       bookingStartDate: getDateOffset(5),
       bookingEndDate: getDateOffset(5),
       status: 'cancelled',
     },
-    
+
     // Multiple bookings for same user (different classes)
     {
       userId: memberUser.id,
-      classScheduleId: strengthTraining.id,
+      classScheduleId: strengthTrainingSchedule.id,
       bookingStartDate: getDateOffset(2),
       bookingEndDate: getDateOffset(2),
       status: 'confirmed',
     },
     {
       userId: memberUser.id,
-      classScheduleId: hiit30.id,
+      classScheduleId: hiit30Schedule.id,
       bookingStartDate: getDateOffset(4),
       bookingEndDate: getDateOffset(4),
       status: 'confirmed',
     },
     {
       userId: memberUser.id,
-      classScheduleId: pilates.id,
+      classScheduleId: pilatesSchedule.id,
       bookingStartDate: getDateOffset(6),
       bookingEndDate: getDateOffset(6),
       status: 'pending',
     },
-    
+
     // Popular classes with multiple bookings
     {
       userId: members[8].id,
-      classScheduleId: yogaBeginner.id,
+      classScheduleId: yogaBeginnerSchedule.id,
       bookingStartDate: getDateOffset(7),
       bookingEndDate: getDateOffset(7),
       status: 'confirmed',
     },
     {
       userId: members[9].id,
-      classScheduleId: yogaBeginner.id,
+      classScheduleId: yogaBeginnerSchedule.id,
       bookingStartDate: getDateOffset(7),
       bookingEndDate: getDateOffset(7),
       status: 'confirmed',
     },
     {
       userId: members[10].id,
-      classScheduleId: hiit30.id,
+      classScheduleId: hiit30Schedule.id,
       bookingStartDate: getDateOffset(8),
       bookingEndDate: getDateOffset(8),
       status: 'confirmed',
     },
     {
       userId: members[11].id,
-      classScheduleId: hiit30.id,
+      classScheduleId: hiit30Schedule.id,
       bookingStartDate: getDateOffset(8),
       bookingEndDate: getDateOffset(8),
       status: 'confirmed',
     },
-    
+
     // Advanced bookings (2-3 weeks ahead)
     {
       userId: members[12].id,
-      classScheduleId: yogaAdvanced.id,
+      classScheduleId: yogaAdvancedSchedule.id,
       bookingStartDate: getDateOffset(14),
       bookingEndDate: getDateOffset(14),
       status: 'confirmed',
     },
     {
       userId: members[13].id,
-      classScheduleId: crossfit.id,
+      classScheduleId: crossfitSchedule.id,
       bookingStartDate: getDateOffset(15),
       bookingEndDate: getDateOffset(15),
       status: 'confirmed',
     },
     {
       userId: members[14].id,
-      classScheduleId: boxing.id,
+      classScheduleId: boxingSchedule.id,
       bookingStartDate: getDateOffset(18),
       bookingEndDate: getDateOffset(18),
       status: 'confirmed',
     },
     {
       userId: members[0].id,
-      classScheduleId: bodyPump.id,
+      classScheduleId: bodyPumpSchedule.id,
       bookingStartDate: getDateOffset(20),
       bookingEndDate: getDateOffset(20),
       status: 'pending',
     },
     {
       userId: members[1].id,
-      classScheduleId: spinning.id,
+      classScheduleId: spinningSchedule.id,
       bookingStartDate: getDateOffset(21),
       bookingEndDate: getDateOffset(21),
       status: 'confirmed',
     },
-    
+
     // More diverse bookings
     {
       userId: members[2].id,
-      classScheduleId: zumba.id,
+      classScheduleId: zumbaSchedule.id,
       bookingStartDate: getDateOffset(12),
       bookingEndDate: getDateOffset(12),
       status: 'confirmed',
     },
     {
       userId: members[3].id,
-      classScheduleId: stretching.id,
+      classScheduleId: stretchingSchedule.id,
       bookingStartDate: getDateOffset(13),
       bookingEndDate: getDateOffset(13),
       status: 'confirmed',
     },
     {
       userId: members[4].id,
-      classScheduleId: hiit45.id,
+      classScheduleId: hiit45Schedule.id,
       bookingStartDate: getDateOffset(14),
       bookingEndDate: getDateOffset(14),
       status: 'pending',
     },
     {
       userId: members[5].id,
-      classScheduleId: yogaBeginner.id,
+      classScheduleId: yogaBeginnerSchedule.id,
       bookingStartDate: getDateOffset(15),
       bookingEndDate: getDateOffset(15),
       status: 'confirmed',
@@ -1300,7 +1612,9 @@ async function main() {
 
   console.log('✅ Seed completed');
   console.log(`- Roles: ADMIN/STAFF/TRAINER/MEMBER`);
-  console.log(`- Memberships: ${basicMembership.name}, ${premiumMembership.name}, ${vipMembership.name}, ${studentMembership.name}, ${seniorMembership.name}, ${dayPassMembership.name}`);
+  console.log(
+    `- Memberships: ${basicMembership.name}, ${premiumMembership.name}, ${vipMembership.name}, ${studentMembership.name}, ${seniorMembership.name}, ${dayPassMembership.name}`,
+  );
   console.log(`- Class Schedules: 12 different classes`);
   console.log(`- Trainer Availabilities: 24 availability slots`);
   console.log(`- Class Bookings: ${classBookings.length} bookings created`);
@@ -1317,4 +1631,3 @@ main().catch((err) => {
   console.error('❌ Seed failed:', err);
   process.exitCode = 1;
 });
-

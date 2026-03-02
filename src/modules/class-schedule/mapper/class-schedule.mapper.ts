@@ -105,6 +105,9 @@ export function toResponse(entity: ClassScheduleEntity) {
     validUntil: entity.validUntil,
     location: entity.location,
     capacity: entity.capacity,
+    // Availability info (per-date, only present when date context is provided)
+    currentBookings: entity.bookingsCount ?? 0,
+    remainingSlots: Math.max(0, entity.capacity - (entity.bookingsCount ?? 0)),
     isActive: entity.isActive,
     trainerId: entity.trainerId,
     trainer: entity.trainer,

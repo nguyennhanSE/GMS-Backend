@@ -50,17 +50,22 @@ export class MembershipRecalculationService {
     try {
       // 1. Get all membership tiers sorted by minPrice descending
       const membershipTiers = await this.getMembershipTiers();
-      
+
       if (membershipTiers.length === 0) {
         this.logger.warn('No membership tiers found. Skipping recalculation.');
-        return { totalUsersProcessed: 0, totalUpdated: 0, totalCreated: 0, errors: 0 };
+        return {
+          totalUsersProcessed: 0,
+          totalUpdated: 0,
+          totalCreated: 0,
+          errors: 0,
+        };
       }
 
       this.logger.log(`Found ${membershipTiers.length} membership tiers`);
 
       // 2. Get all users with their total purchase amounts
       const users = await this.getUsersWithPurchaseAmounts();
-      
+
       this.logger.log(`Processing ${users.length} users`);
 
       // 3. Process each user
@@ -69,7 +74,7 @@ export class MembershipRecalculationService {
           const result = await this.recalculateUserMembership(
             user.id,
             user.totalPurchaseAmount,
-            membershipTiers
+            membershipTiers,
           );
 
           if (result.action === 'created') {
@@ -82,7 +87,7 @@ export class MembershipRecalculationService {
         } catch (error) {
           this.logger.error(
             `Error processing user ${user.id}: ${error.message}`,
-            error.stack
+            error.stack,
           );
           errors++;
         }
@@ -91,8 +96,8 @@ export class MembershipRecalculationService {
       const duration = Date.now() - startTime;
       this.logger.log(
         `Membership recalculation completed in ${duration}ms. ` +
-        `Processed: ${totalUsersProcessed}, Created: ${totalCreated}, ` +
-        `Updated: ${totalUpdated}, Errors: ${errors}`
+          `Processed: ${totalUsersProcessed}, Created: ${totalCreated}, ` +
+          `Updated: ${totalUpdated}, Errors: ${errors}`,
       );
 
       return { totalUsersProcessed, totalUpdated, totalCreated, errors };
@@ -109,7 +114,7 @@ export class MembershipRecalculationService {
   async recalculateUserMembership(
     userId: string,
     totalPurchaseAmount: number,
-    membershipTiers?: MembershipTier[]
+    membershipTiers?: MembershipTier[],
   ): Promise<{ action: 'created' | 'updated' | 'unchanged' }> {
     // Get membership tiers if not provided
     if (!membershipTiers) {
@@ -124,12 +129,12 @@ export class MembershipRecalculationService {
     // Determine appropriate membership tier based on purchase amount
     const appropriateTier = this.determineAppropriateMembershipTier(
       totalPurchaseAmount,
-      membershipTiers
+      membershipTiers,
     );
 
     if (!appropriateTier) {
       this.logger.warn(
-        `Could not determine appropriate tier for user ${userId} with purchase amount ${totalPurchaseAmount}`
+        `Could not determine appropriate tier for user ${userId} with purchase amount ${totalPurchaseAmount}`,
       );
       return { action: 'unchanged' };
     }
@@ -153,7 +158,10 @@ export class MembershipRecalculationService {
     // If user already has this membership and it's still active, check if it needs updating
     if (existingMembership) {
       // If the membership is still valid and active, just check if it needs updating
-      if (existingMembership.endDate > now && existingMembership.status === 'normal') {
+      if (
+        existingMembership.endDate > now &&
+        existingMembership.status === 'normal'
+      ) {
         return { action: 'unchanged' };
       }
 
@@ -171,7 +179,7 @@ export class MembershipRecalculationService {
       });
 
       this.logger.debug(
-        `Updated membership for user ${userId} to ${appropriateTier.name}`
+        `Updated membership for user ${userId} to ${appropriateTier.name}`,
       );
       return { action: 'updated' };
     }
@@ -202,7 +210,7 @@ export class MembershipRecalculationService {
       });
 
       this.logger.debug(
-        `Expired old membership ${otherActiveMembership.membershipName} for user ${userId}`
+        `Expired old membership ${otherActiveMembership.membershipName} for user ${userId}`,
       );
     }
 
@@ -221,7 +229,7 @@ export class MembershipRecalculationService {
     });
 
     this.logger.debug(
-      `Created new membership ${appropriateTier.name} for user ${userId}`
+      `Created new membership ${appropriateTier.name} for user ${userId}`,
     );
     return { action: 'created' };
   }
@@ -254,54 +262,52 @@ export class MembershipRecalculationService {
     const result = await this.prisma.$transaction<
       Array<{ id: string; totalPurchaseAmount: number }>
     >(async (tx) => {
-        // Get all users with their memberships
-        const users = await tx.user.findMany({
-          select: {
-            id: true,
-            userMembership: {
-              select: {
-                id: true,
-                startDate: true,
-              },
+      // Get all users with their memberships
+      const users = await tx.user.findMany({
+        select: {
+          id: true,
+          userMembership: {
+            select: {
+              id: true,
+              startDate: true,
             },
           },
+        },
+      });
+
+      // Calculate total purchase amount for each user
+      const usersWithAmounts: Array<{
+        id: string;
+        totalPurchaseAmount: number;
+      }> = [];
+
+      for (const user of users) {
+        let totalPurchaseAmount = 0;
+
+        // Sum up all successful payments for this user
+        const payments = await tx.payment.findMany({
+          where: {
+            userId: user.id,
+            targetType: 'MEMBERSHIP',
+            status: 'SUCCESS',
+          },
+          select: {
+            amount: true,
+          },
         });
-        
-        // Calculate total purchase amount for each user
-        const usersWithAmounts: Array<{ id: string; totalPurchaseAmount: number }> = [];
-        
-        for (const user of users) {
-          let totalPurchaseAmount = 0;
-          
-          // Sum up all completed payments for this user's memberships
-          for (const membership of user.userMembership) {
-            const payments = await tx.membershipPayment.findMany({
-              where: {
-                userMembership: {
-                  userId: user.id,
-                  membershipId: membership.id,
-                },
-                status: 'completed',
-                completedAt: {
-                  gte: membership.startDate, // Only count payments after membership start
-                },
-              },
-              select: {
-                amount: true,
-              },
-            });
-            
-            // Sum the amounts
-            totalPurchaseAmount += payments.reduce((sum, payment) => sum + payment.amount, 0);
-          }
-          
-          usersWithAmounts.push({
-            id: user.id,
-            totalPurchaseAmount,
-          });
-        }
-        
-        return usersWithAmounts;
+
+        totalPurchaseAmount = payments.reduce(
+          (sum, p) => sum + Number(p.amount),
+          0,
+        );
+
+        usersWithAmounts.push({
+          id: user.id,
+          totalPurchaseAmount,
+        });
+      }
+
+      return usersWithAmounts;
     });
 
     return result;
@@ -313,7 +319,7 @@ export class MembershipRecalculationService {
    */
   private determineAppropriateMembershipTier(
     purchaseAmount: number,
-    tiers: MembershipTier[]
+    tiers: MembershipTier[],
   ): MembershipTier | null {
     // Tiers should be sorted by minPrice descending
     // Return the first tier where purchase amount >= minPrice
@@ -331,16 +337,14 @@ export class MembershipRecalculationService {
    * Recalculate memberships for users whose purchase amounts fall within a specific range
    * Useful after updating a specific membership tier's minPrice
    */
-  async recalculateMembershipsAfterTierUpdate(
-    updatedTierId: string
-  ): Promise<{
+  async recalculateMembershipsAfterTierUpdate(updatedTierId: string): Promise<{
     totalUsersProcessed: number;
     totalUpdated: number;
     totalCreated: number;
     errors: number;
   }> {
     this.logger.log(
-      `Recalculating memberships after tier ${updatedTierId} was updated`
+      `Recalculating memberships after tier ${updatedTierId} was updated`,
     );
 
     // Get the updated tier
@@ -350,7 +354,12 @@ export class MembershipRecalculationService {
 
     if (!updatedTier) {
       this.logger.warn(`Tier ${updatedTierId} not found`);
-      return { totalUsersProcessed: 0, totalUpdated: 0, totalCreated: 0, errors: 0 };
+      return {
+        totalUsersProcessed: 0,
+        totalUpdated: 0,
+        totalCreated: 0,
+        errors: 0,
+      };
     }
 
     // Get all tiers to determine affected users
@@ -358,7 +367,9 @@ export class MembershipRecalculationService {
 
     // Find the next tier (lower minPrice)
     const sortedTiers = [...allTiers].sort((a, b) => b.minPrice - a.minPrice);
-    const updatedTierIndex = sortedTiers.findIndex((t) => t.id === updatedTierId);
+    const updatedTierIndex = sortedTiers.findIndex(
+      (t) => t.id === updatedTierId,
+    );
     const nextLowerTier = sortedTiers[updatedTierIndex + 1];
 
     // Determine the range of users to update
@@ -370,4 +381,3 @@ export class MembershipRecalculationService {
     return await this.recalculateAllUserMemberships();
   }
 }
-

@@ -34,6 +34,9 @@ export class ClassScheduleEntity {
   createdAt?: Date | null;
   updatedAt?: Date | null;
 
+  // Computed: active bookings count for a specific date
+  bookingsCount?: number;
+
   // Relations
   gymClass?: GymClassEntity | null;
   classBookings?: ClassBookingEntity[];

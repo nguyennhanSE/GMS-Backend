@@ -24,9 +24,12 @@ export class ClassScheduleRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Get class schedule by ID with gymClass relation
+   * Get class schedule by ID with gymClass relation and optional booking count
    */
-  async getById(id: string): Promise<ClassScheduleEntity | null> {
+  async getById(
+    id: string,
+    targetDate?: Date,
+  ): Promise<ClassScheduleEntity | null> {
     if (!id || id.trim() === '') {
       return null;
     }
@@ -41,7 +44,23 @@ export class ClassScheduleRepository {
         return null;
       }
 
-      return toClassScheduleEntity(classSchedule);
+      const entity = toClassScheduleEntity(classSchedule);
+
+      // Resolve date: use provided date, or auto-resolve to next occurrence
+      const resolvedDate =
+        targetDate ??
+        (entity.dayOfWeek
+          ? this.getNextOccurrence(entity.dayOfWeek)
+          : undefined);
+
+      if (resolvedDate) {
+        entity.bookingsCount = await this.countBookingsForDate(
+          id,
+          resolvedDate,
+        );
+      }
+
+      return entity;
     } catch (error) {
       console.error('Prisma error in getById:', error);
       throw error;
@@ -181,6 +200,7 @@ export class ClassScheduleRepository {
   async getPaginate(
     filter: ClassScheduleFilterDto,
     options: PaginateOptions,
+    targetDate?: Date,
   ): Promise<IPaginate<ClassScheduleEntity>> {
     const page = options.page || 1;
     const limit = options.limit || 10;
@@ -275,13 +295,32 @@ export class ClassScheduleRepository {
         orderBy,
         skip,
         take: limit,
-        include: { gymClass: true },
+        include: { gymClass: true, scheduleDays: true },
       }),
       counted ? this.prisma.classSchedule.count({ where }) : Promise.resolve(0),
     ]);
 
     // Map to entities
     const mappedDocs = docs.map(toClassScheduleEntity);
+
+    // Enrich with per-date booking counts
+    if (mappedDocs.length > 0) {
+      if (targetDate) {
+        // Explicit date: single batch query for all schedules
+        const scheduleIds = mappedDocs.map((d) => d.id);
+        const countMap = await this.getBookingCountsForDate(
+          scheduleIds,
+          targetDate,
+        );
+        for (const doc of mappedDocs) {
+          doc.bookingsCount = countMap.get(doc.id) ?? 0;
+        }
+      } else {
+        // No date: group by dayOfWeek, auto-resolve next occurrence per group
+        // At most 7 queries (one per unique day), not N queries
+        await this.enrichWithAutoResolvedCounts(mappedDocs);
+      }
+    }
 
     // Calculate pagination metadata
     const totalPages = counted ? Math.ceil(totalDocs / limit) : 0;
@@ -318,29 +357,100 @@ export class ClassScheduleRepository {
   }
 
   /**
-   * Get schedules by day of week
+   * Get schedules by day of week with optional booking counts
    */
-  async getByDayOfWeek(dayOfWeek: DayOfWeek): Promise<ClassScheduleEntity[]> {
+  async getByDayOfWeek(
+    dayOfWeek: DayOfWeek,
+    targetDate?: Date,
+  ): Promise<ClassScheduleEntity[]> {
     const schedules = await this.prisma.classSchedule.findMany({
       where: { dayOfWeek, isActive: true },
-      include: { gymClass: true },
+      include: { gymClass: true, scheduleDays: true },
       orderBy: { startTime: 'asc' },
     });
 
-    return schedules.map(toClassScheduleEntity);
+    const entities = schedules.map(toClassScheduleEntity);
+
+    if (targetDate && entities.length > 0) {
+      const ids = entities.map((e) => e.id);
+      const countMap = await this.getBookingCountsForDate(ids, targetDate);
+      for (const entity of entities) {
+        entity.bookingsCount = countMap.get(entity.id) ?? 0;
+      }
+    }
+
+    return entities;
   }
 
   /**
-   * Get schedules by trainer
+   * Get schedules by trainer with optional booking counts
    */
-  async getByTrainerId(trainerId: string): Promise<ClassScheduleEntity[]> {
+  async getByTrainerId(
+    trainerId: string,
+    targetDate?: Date,
+  ): Promise<ClassScheduleEntity[]> {
     const schedules = await this.prisma.classSchedule.findMany({
       where: { trainerId },
-      include: { gymClass: true },
+      include: { gymClass: true, scheduleDays: true },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     });
 
-    return schedules.map(toClassScheduleEntity);
+    const entities = schedules.map(toClassScheduleEntity);
+
+    if (targetDate && entities.length > 0) {
+      const ids = entities.map((e) => e.id);
+      const countMap = await this.getBookingCountsForDate(ids, targetDate);
+      for (const entity of entities) {
+        entity.bookingsCount = countMap.get(entity.id) ?? 0;
+      }
+    }
+
+    return entities;
+  }
+
+  /**
+   * Count active bookings for a single schedule on a specific date
+   */
+  private async countBookingsForDate(
+    scheduleId: string,
+    targetDate: Date,
+  ): Promise<number> {
+    return this.prisma.classBooking.count({
+      where: {
+        classScheduleId: scheduleId,
+        status: { in: ['pending', 'confirmed', 'attended'] },
+        bookingStartDate: { lte: targetDate },
+        bookingEndDate: { gte: targetDate },
+      },
+    });
+  }
+
+  /**
+   * Batch count active bookings for multiple schedules on a specific date
+   * Uses groupBy to avoid N+1 queries
+   */
+  private async getBookingCountsForDate(
+    scheduleIds: string[],
+    targetDate: Date,
+  ): Promise<Map<string, number>> {
+    const counts = await this.prisma.classBooking.groupBy({
+      by: ['classScheduleId'],
+      where: {
+        classScheduleId: { in: scheduleIds },
+        status: { in: ['pending', 'confirmed', 'attended'] },
+        bookingStartDate: { lte: targetDate },
+        bookingEndDate: { gte: targetDate },
+      },
+      _count: { id: true },
+    });
+
+    const map = new Map<string, number>();
+    for (const row of counts) {
+      if (row.classScheduleId) {
+        map.set(row.classScheduleId, row._count.id);
+      }
+    }
+    return map;
   }
 
   /**
@@ -412,5 +522,63 @@ export class ClassScheduleRepository {
     });
 
     return conflicts.map(toClassScheduleEntity);
+  }
+
+  /**
+   * Compute the next occurrence of a given day of week (UTC noon).
+   * If today is that day, returns next week's occurrence.
+   */
+  private getNextOccurrence(dayOfWeek: DayOfWeek): Date {
+    const dayMap: Record<string, number> = {
+      SUN: 0,
+      MON: 1,
+      TUE: 2,
+      WED: 3,
+      THU: 4,
+      FRI: 5,
+      SAT: 6,
+    };
+    const target = dayMap[dayOfWeek] ?? 1;
+    const today = new Date();
+    const current = today.getUTCDay();
+    const daysUntil = (target - current + 7) % 7 || 7;
+    const next = new Date(today);
+    next.setUTCDate(today.getUTCDate() + daysUntil);
+    next.setUTCHours(12, 0, 0, 0);
+    return next;
+  }
+
+  /**
+   * Enrich schedules with booking counts by auto-resolving next occurrence.
+   * Groups schedules by dayOfWeek → at most 7 batch queries.
+   */
+  private async enrichWithAutoResolvedCounts(
+    schedules: ClassScheduleEntity[],
+  ): Promise<void> {
+    // Group schedules by dayOfWeek
+    const byDay = new Map<DayOfWeek, ClassScheduleEntity[]>();
+    for (const schedule of schedules) {
+      if (!schedule.dayOfWeek) {
+        schedule.bookingsCount = 0;
+        continue;
+      }
+      const group = byDay.get(schedule.dayOfWeek) ?? [];
+      group.push(schedule);
+      byDay.set(schedule.dayOfWeek, group);
+    }
+
+    // For each unique day (max 7), compute next occurrence and batch count
+    const promises = Array.from(byDay.entries()).map(
+      async ([day, daySchedules]) => {
+        const nextDate = this.getNextOccurrence(day);
+        const ids = daySchedules.map((s) => s.id);
+        const countMap = await this.getBookingCountsForDate(ids, nextDate);
+        for (const schedule of daySchedules) {
+          schedule.bookingsCount = countMap.get(schedule.id) ?? 0;
+        }
+      },
+    );
+
+    await Promise.all(promises);
   }
 }

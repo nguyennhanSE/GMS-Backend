@@ -36,6 +36,7 @@ model User {
   userRole UserRole[]
   userMembership UserMembership[]
   classBookings ClassBooking[]
+  payments Payment[]
   sessions Session[]
   trainerAvailabilities TrainerAvailability[]
   classSchedules ClassSchedule[]
@@ -48,7 +49,7 @@ model UserMembership {
   membershipId String @db.Uuid
   membershipName String @map("membership_name")
   membershipDescription String @map("membership_description")
-  membershipPaymentId String? @unique @map("membership_payment_id") @db.Uuid
+  paymentId String? @unique @map("payment_id") @db.Uuid
   status String @default("normal") @map("status")
   level MembershipLevel @default(BASIC) @map("level")
 
@@ -60,7 +61,7 @@ model UserMembership {
   // relations
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  membershipPayment MembershipPayment? @relation(fields: [membershipPaymentId], references: [id], onDelete: SetNull)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   // extension
   updatedByAdmin Boolean @default(false) @map("updated_by_admin")
 
@@ -74,6 +75,18 @@ enum MembershipLevel {
   BASIC
   PREMIUM
   ELITE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentTargetType {
+  CLASS_BOOKING
+  MEMBERSHIP
 }
 model Membership {
   id String @id @default(uuid()) @db.Uuid
@@ -90,20 +103,41 @@ model Membership {
   @@index([minPrice])
 }
 
-model MembershipPayment {
-  id String @id @default(uuid()) @db.Uuid
-  membershipId String @db.Uuid
-  amount Int @map("amount")
-  method String @map("method")
-  gatewayName String @map("gateway_name")
-  gatewayTransactionId String @map("gateway_transaction_id")
-  status String @map("status")
-  completedAt DateTime? @map("completed_at")
+model Payment {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
 
-  userMembership UserMembership? 
+  // Polymorphic target
+  targetType        PaymentTargetType  @map("target_type")
+  targetId          String             @map("target_id") @db.Uuid
 
-  @@index([membershipId])
-  @@map("membership_payments")
+  // Money
+  amount            Decimal            @map("amount") @db.Decimal(10, 2)
+  currency          String             @default("VND") @map("currency") @db.VarChar(3)
+
+  // Provider integration
+  provider          String             @default("STRIPE") @map("provider") @db.VarChar(20)
+  providerSessionId String?            @unique @map("provider_session_id")
+  providerPaymentId String?            @unique @map("provider_payment_id")
+
+  // State
+  status            PaymentStatus      @default(PENDING) @map("status")
+  failureReason     String?            @map("failure_reason")
+  paidAt            DateTime?          @map("paid_at") @db.Timestamp(6)
+  metadata          Json?              @map("metadata")
+
+  // Timestamps
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  // Relations
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  userMembership    UserMembership?
+
+  @@index([userId])
+  @@index([targetType, targetId])
+  @@index([status])
+  @@map("payments")
 }
 
 model Role {
@@ -180,7 +214,7 @@ model ClassBooking {
   @@index([userId])
   @@index([classScheduleId])
   @@index([classScheduleId, status])
-  @@unique([userId, classScheduleId], name: "unique_user_schedule_booking")
+  @@unique([userId, classScheduleId, bookingStartDate], name: "unique_user_schedule_date_booking")
   @@map("class_bookings")
 }
 

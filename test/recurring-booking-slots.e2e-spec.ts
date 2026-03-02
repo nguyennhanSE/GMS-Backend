@@ -1,0 +1,619 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { App } from 'supertest/types';
+import { AppModule } from '../src/app.module';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  TestData,
+  loginAs,
+  authRequest,
+  createTestData,
+  cleanupTestData,
+  getNextDayOfWeek,
+  formatDate,
+  addDays,
+  getErrorMessage,
+} from './test-helpers';
+
+/**
+ * Integration tests for:
+ * 1. Recurring booking bug fixes (unique constraint, duplicate check, capacity check)
+ * 2. Remaining slots tracking (date-aware currentBookings / remainingSlots)
+ */
+describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
+  let app: INestApplication<App>;
+  let prisma: PrismaService;
+  let testData: TestData;
+  let adminToken: string;
+  let memberToken: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+    await app.init();
+
+    prisma = app.get(PrismaService);
+
+    await cleanupTestData(prisma);
+    testData = await createTestData(prisma);
+
+    try {
+      adminToken = await loginAs(
+        app,
+        testData.adminUser.email,
+        testData.adminPassword,
+      );
+      memberToken = await loginAs(
+        app,
+        testData.memberUser.email,
+        testData.memberPassword,
+      );
+    } catch {
+      console.warn('Login failed - some tests will be skipped');
+    }
+  }, 60000);
+
+  afterAll(async () => {
+    await cleanupTestData(prisma);
+    await app.close();
+  });
+
+  afterEach(async () => {
+    await prisma.classBooking.deleteMany({
+      where: { classScheduleId: testData.testSchedule.id },
+    });
+  });
+
+  // ==========================================================
+  // BUG FIX TESTS: Recurring Schedule Booking
+  // ==========================================================
+
+  describe('Bug Fix: Per-Date Booking (not all-time)', () => {
+    it('should allow booking the same schedule on different dates', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+      const mondayAfter = addDays(nextMonday, 7);
+
+      // Book for first Monday
+      const res1 = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(nextMonday),
+          bookingEndDate: formatDate(addDays(nextMonday, 1)),
+        });
+
+      expect(res1.status).toBe(201);
+      expect(res1.body.data).toBeDefined();
+
+      // Book for second Monday — should SUCCEED (different date)
+      const res2 = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(mondayAfter),
+          bookingEndDate: formatDate(addDays(mondayAfter, 1)),
+        });
+
+      expect(res2.status).toBe(201);
+      expect(res2.body.data).toBeDefined();
+
+      // Verify both bookings exist
+      const bookings = await prisma.classBooking.findMany({
+        where: {
+          userId: testData.memberUser.id,
+          classScheduleId: testData.testSchedule.id,
+        },
+      });
+      expect(bookings.length).toBe(2);
+    });
+
+    it('should NOT allow double-booking the same schedule on the same date', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+
+      // First booking
+      const res1 = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(nextMonday),
+          bookingEndDate: formatDate(addDays(nextMonday, 1)),
+        });
+
+      expect(res1.status).toBe(201);
+
+      // Second booking — same date — should FAIL
+      const res2 = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(nextMonday),
+          bookingEndDate: formatDate(addDays(nextMonday, 1)),
+        });
+
+      expect(res2.status).toBe(400);
+      expect(getErrorMessage(res2.body)).toContain(
+        'already has an active booking',
+      );
+    });
+  });
+
+  describe('Bug Fix: Cancel & Rebook', () => {
+    it('should allow rebooking same schedule and date after cancellation', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+
+      // 1. Create booking
+      const createRes = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(nextMonday),
+          bookingEndDate: formatDate(addDays(nextMonday, 1)),
+        });
+
+      expect(createRes.status).toBe(201);
+      const bookingId = createRes.body.data[0].id;
+
+      // 2. Cancel booking
+      const cancelRes = await authRequest(app, adminToken).patch(
+        `/class-booking/${bookingId}/cancel`,
+      );
+
+      expect(cancelRes.status).toBe(200);
+      expect(cancelRes.body.data.status).toBe('cancelled');
+
+      // 3. Rebook same schedule, same date — should SUCCEED (upsert reactivates)
+      const rebookRes = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(nextMonday),
+          bookingEndDate: formatDate(addDays(nextMonday, 1)),
+        });
+
+      expect(rebookRes.status).toBe(201);
+      expect(rebookRes.body.data).toBeDefined();
+
+      // 4. Verify the booking is now pending (reactivated, not a new row)
+      const bookings = await prisma.classBooking.findMany({
+        where: {
+          userId: testData.memberUser.id,
+          classScheduleId: testData.testSchedule.id,
+          bookingStartDate: nextMonday,
+        },
+      });
+
+      // Should be exactly 1 row (upserted, not duplicated)
+      expect(bookings.length).toBe(1);
+      expect(bookings[0].status).toBe('pending');
+    });
+  });
+
+  describe('Bug Fix: Per-Date Capacity Check', () => {
+    it('should count capacity per-date, not all-time', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+      const mondayAfter = addDays(nextMonday, 7);
+
+      // Test schedule has capacity = 5
+      // Pre-cleanup leftover temp users from previous runs
+      await prisma.classBooking.deleteMany({
+        where: { user: { email: { contains: 'cap-test-' } } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'cap-test-' } },
+      });
+      // Create 4 bookings for the first Monday (using direct Prisma to speed up)
+      for (let i = 0; i < 4; i++) {
+        const tempUser = await prisma.user.create({
+          data: {
+            firstName: `CapUser${i}`,
+            lastName: 'Test',
+            email: `cap-test-${i}@test.local`,
+            password: 'dummy',
+            status: 'active',
+          },
+        });
+        await prisma.classBooking.create({
+          data: {
+            userId: tempUser.id,
+            classScheduleId: testData.testSchedule.id,
+            bookingStartDate: nextMonday,
+            bookingEndDate: nextMonday,
+            status: 'confirmed',
+          },
+        });
+      }
+
+      // Book member for second Monday — should SUCCEED
+      // (4 bookings on first Monday should NOT affect second Monday's capacity)
+      const res = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(mondayAfter),
+          bookingEndDate: formatDate(addDays(mondayAfter, 1)),
+        });
+
+      expect(res.status).toBe(201);
+
+      // Cleanup temp users
+      await prisma.classBooking.deleteMany({
+        where: {
+          user: { email: { contains: 'cap-test-' } },
+        },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'cap-test-' } },
+      });
+    });
+
+    it('should reject booking when specific date is at capacity', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+
+      // Pre-cleanup leftover temp users
+      await prisma.classBooking.deleteMany({
+        where: { user: { email: { contains: 'full-test-' } } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'full-test-' } },
+      });
+      // Fill all 5 slots for this Monday
+      for (let i = 0; i < 5; i++) {
+        const tempUser = await prisma.user.create({
+          data: {
+            firstName: `FullUser${i}`,
+            lastName: 'Test',
+            email: `full-test-${i}@test.local`,
+            password: 'dummy',
+            status: 'active',
+          },
+        });
+        await prisma.classBooking.create({
+          data: {
+            userId: tempUser.id,
+            classScheduleId: testData.testSchedule.id,
+            bookingStartDate: nextMonday,
+            bookingEndDate: nextMonday,
+            status: 'confirmed',
+          },
+        });
+      }
+
+      // Try to book member for the same full Monday — should FAIL
+      const res = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(nextMonday),
+          bookingEndDate: formatDate(addDays(nextMonday, 1)),
+        });
+
+      expect(res.status).toBe(400);
+      expect(getErrorMessage(res.body)).toContain('full');
+
+      // Cleanup temp users
+      await prisma.classBooking.deleteMany({
+        where: {
+          user: { email: { contains: 'full-test-' } },
+        },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'full-test-' } },
+      });
+    });
+
+    it('should NOT count cancelled bookings toward capacity', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+
+      // Pre-cleanup leftover temp users
+      await prisma.classBooking.deleteMany({
+        where: { user: { email: { contains: 'cancel-cap-' } } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'cancel-cap-' } },
+      });
+      // Create 5 bookings but cancel 2 of them
+      const tempUserIds: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const tempUser = await prisma.user.create({
+          data: {
+            firstName: `CancelCapUser${i}`,
+            lastName: 'Test',
+            email: `cancel-cap-${i}@test.local`,
+            password: 'dummy',
+            status: 'active',
+          },
+        });
+        tempUserIds.push(tempUser.id);
+        await prisma.classBooking.create({
+          data: {
+            userId: tempUser.id,
+            classScheduleId: testData.testSchedule.id,
+            bookingStartDate: nextMonday,
+            bookingEndDate: nextMonday,
+            status: i < 2 ? 'cancelled' : 'confirmed', // First 2 cancelled
+          },
+        });
+      }
+
+      // 3 confirmed + 2 cancelled = 3 active, capacity = 5 → should SUCCEED
+      const res = await authRequest(app, adminToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: formatDate(nextMonday),
+          bookingEndDate: formatDate(addDays(nextMonday, 1)),
+        });
+
+      expect(res.status).toBe(201);
+
+      // Cleanup
+      await prisma.classBooking.deleteMany({
+        where: { user: { email: { contains: 'cancel-cap-' } } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'cancel-cap-' } },
+      });
+    });
+  });
+
+  // ==========================================================
+  // REMAINING SLOTS TRACKING TESTS
+  // ==========================================================
+
+  describe('Remaining Slots: GET /class-schedule/list', () => {
+    it('should return currentBookings and remainingSlots in response', async () => {
+      if (!adminToken) return;
+
+      const response = await authRequest(app, adminToken)
+        .get('/class-schedule/list')
+        .send();
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.docs).toBeDefined();
+
+      const schedules = response.body.data.docs;
+      expect(schedules.length).toBeGreaterThan(0);
+
+      // Every schedule should have remainingSlots fields
+      for (const schedule of schedules) {
+        expect(schedule).toHaveProperty('currentBookings');
+        expect(schedule).toHaveProperty('remainingSlots');
+        expect(typeof schedule.currentBookings).toBe('number');
+        expect(typeof schedule.remainingSlots).toBe('number');
+        expect(schedule.remainingSlots).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('should return correct remainingSlots for a specific date', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+
+      // Create 3 bookings for this Monday
+      for (let i = 0; i < 3; i++) {
+        const tempUser = await prisma.user.create({
+          data: {
+            firstName: `SlotUser${i}`,
+            lastName: 'Test',
+            email: `slot-test-${i}@test.local`,
+            password: 'dummy',
+            status: 'active',
+          },
+        });
+        await prisma.classBooking.create({
+          data: {
+            userId: tempUser.id,
+            classScheduleId: testData.testSchedule.id,
+            bookingStartDate: nextMonday,
+            bookingEndDate: nextMonday,
+            status: 'confirmed',
+          },
+        });
+      }
+
+      // Query with date param
+      const response = await authRequest(app, adminToken)
+        .get(`/class-schedule/list?date=${formatDate(nextMonday)}`)
+        .send();
+
+      expect(response.status).toBe(200);
+
+      const testSchedule = response.body.data.docs.find(
+        (s: any) => s.id === testData.testSchedule.id,
+      );
+
+      if (testSchedule) {
+        // capacity=5, 3 bookings → currentBookings=3, remainingSlots=2
+        expect(testSchedule.currentBookings).toBe(3);
+        expect(testSchedule.remainingSlots).toBe(2);
+      }
+
+      // Cleanup
+      await prisma.classBooking.deleteMany({
+        where: { user: { email: { contains: 'slot-test-' } } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'slot-test-' } },
+      });
+    });
+
+    it('should show independent slots for different dates', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+      const mondayAfter = addDays(nextMonday, 7);
+
+      // 2 bookings on first Monday
+      for (let i = 0; i < 2; i++) {
+        const tempUser = await prisma.user.create({
+          data: {
+            firstName: `DateA${i}`,
+            lastName: 'Test',
+            email: `date-a-${i}@test.local`,
+            password: 'dummy',
+            status: 'active',
+          },
+        });
+        await prisma.classBooking.create({
+          data: {
+            userId: tempUser.id,
+            classScheduleId: testData.testSchedule.id,
+            bookingStartDate: nextMonday,
+            bookingEndDate: nextMonday,
+            status: 'confirmed',
+          },
+        });
+      }
+
+      // 4 bookings on second Monday
+      for (let i = 0; i < 4; i++) {
+        const tempUser = await prisma.user.create({
+          data: {
+            firstName: `DateB${i}`,
+            lastName: 'Test',
+            email: `date-b-${i}@test.local`,
+            password: 'dummy',
+            status: 'active',
+          },
+        });
+        await prisma.classBooking.create({
+          data: {
+            userId: tempUser.id,
+            classScheduleId: testData.testSchedule.id,
+            bookingStartDate: mondayAfter,
+            bookingEndDate: mondayAfter,
+            status: 'confirmed',
+          },
+        });
+      }
+
+      // Check date A: 2 bookings → 3 remaining
+      const resA = await authRequest(app, adminToken)
+        .get(`/class-schedule/list?date=${formatDate(nextMonday)}`)
+        .send();
+
+      const scheduleA = resA.body.data.docs.find(
+        (s: any) => s.id === testData.testSchedule.id,
+      );
+      if (scheduleA) {
+        expect(scheduleA.currentBookings).toBe(2);
+        expect(scheduleA.remainingSlots).toBe(3);
+      }
+
+      // Check date B: 4 bookings → 1 remaining
+      const resB = await authRequest(app, adminToken)
+        .get(`/class-schedule/list?date=${formatDate(mondayAfter)}`)
+        .send();
+
+      const scheduleB = resB.body.data.docs.find(
+        (s: any) => s.id === testData.testSchedule.id,
+      );
+      if (scheduleB) {
+        expect(scheduleB.currentBookings).toBe(4);
+        expect(scheduleB.remainingSlots).toBe(1);
+      }
+
+      // Cleanup
+      await prisma.classBooking.deleteMany({
+        where: {
+          user: { email: { contains: 'date-a-' } },
+        },
+      });
+      await prisma.classBooking.deleteMany({
+        where: {
+          user: { email: { contains: 'date-b-' } },
+        },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'date-a-' } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: 'date-b-' } },
+      });
+    });
+  });
+
+  describe('Remaining Slots: GET /class-schedule/:id', () => {
+    it('should return remainingSlots for a specific schedule with date', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+
+      // Create 1 booking
+      await prisma.classBooking.create({
+        data: {
+          userId: testData.memberUser.id,
+          classScheduleId: testData.testSchedule.id,
+          bookingStartDate: nextMonday,
+          bookingEndDate: nextMonday,
+          status: 'confirmed',
+        },
+      });
+
+      const response = await authRequest(app, adminToken).get(
+        `/class-schedule/${testData.testSchedule.id}?date=${formatDate(nextMonday)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.currentBookings).toBe(1);
+      expect(response.body.data.remainingSlots).toBe(4); // capacity=5 - 1 booking
+    });
+
+    it('should auto-resolve to next occurrence when no date is provided', async () => {
+      if (!adminToken) return;
+
+      // Create a booking on the next Monday (test schedule is MON)
+      const nextMonday = getNextDayOfWeek('MON');
+      await prisma.classBooking.create({
+        data: {
+          userId: testData.memberUser.id,
+          classScheduleId: testData.testSchedule.id,
+          bookingStartDate: nextMonday,
+          bookingEndDate: nextMonday,
+          status: 'confirmed',
+        },
+      });
+
+      // Call WITHOUT date param — should auto-resolve to next Monday
+      const response = await authRequest(app, adminToken).get(
+        `/class-schedule/${testData.testSchedule.id}`,
+      );
+
+      expect(response.status).toBe(200);
+      // Auto-resolved: should show real count, not 0
+      expect(response.body.data.currentBookings).toBe(1);
+      expect(response.body.data.remainingSlots).toBe(4); // capacity=5 - 1
+    });
+  });
+});

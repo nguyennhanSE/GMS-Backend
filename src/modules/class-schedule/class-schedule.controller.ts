@@ -82,6 +82,7 @@ export class ClassScheduleController {
         trainerId,
         classId,
         isActive,
+        date,
       } = query;
 
       const pageNum = page
@@ -95,6 +96,9 @@ export class ClassScheduleController {
           : limit
         : 10;
 
+      // Parse date for availability context (UTC noon to avoid timezone issues)
+      const targetDate = date ? new Date(date + 'T12:00:00Z') : undefined;
+
       const data = await this.classScheduleService.findAll(
         {
           page: pageNum,
@@ -104,6 +108,7 @@ export class ClassScheduleController {
         },
         { q: search, searchField, dayOfWeek, trainerId, classId, isActive },
         { counted: counted ?? true },
+        targetDate,
       );
 
       const docs = data.docs.map((e) => toResponse(e));
@@ -125,11 +130,19 @@ export class ClassScheduleController {
     description: 'Class schedule retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'Class schedule not found' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('date') date?: string,
+  ) {
     const responseModel = new ResponseModel();
 
     try {
-      const classSchedule = await this.classScheduleService.findOne(id);
+      const targetDate = date ? new Date(date + 'T12:00:00Z') : undefined;
+
+      const classSchedule = await this.classScheduleService.findOne(
+        id,
+        targetDate,
+      );
       const result = toResponse(classSchedule);
       responseModel.setData(result);
     } catch (error) {

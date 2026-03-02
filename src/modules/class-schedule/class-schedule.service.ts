@@ -68,24 +68,32 @@ export class ClassScheduleService {
   }
 
   /**
-   * Get paginated class schedules
+   * Get paginated class schedules with optional per-date availability
    */
   async findAll(
     paginateRequest: PaginateOptions,
     filter: ClassScheduleFilterDto,
     options: { counted?: boolean },
+    targetDate?: Date,
   ): Promise<IPaginate<ClassScheduleEntity>> {
-    return this.classScheduleRepository.getPaginate(filter, {
-      ...paginateRequest,
-      counted: options.counted,
-    });
+    return this.classScheduleRepository.getPaginate(
+      filter,
+      {
+        ...paginateRequest,
+        counted: options.counted,
+      },
+      targetDate,
+    );
   }
 
   /**
-   * Find one class schedule by id
+   * Find one class schedule by id with optional per-date availability
    */
-  async findOne(id: string): Promise<ClassScheduleEntity> {
-    const classSchedule = await this.classScheduleRepository.getById(id);
+  async findOne(id: string, targetDate?: Date): Promise<ClassScheduleEntity> {
+    const classSchedule = await this.classScheduleRepository.getById(
+      id,
+      targetDate,
+    );
     if (!classSchedule) {
       throw new NotFoundException(`Class schedule with id ${id} not found`);
     }

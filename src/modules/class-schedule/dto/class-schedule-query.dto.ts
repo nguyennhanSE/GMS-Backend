@@ -107,4 +107,13 @@ export class GetClassSchedulesQueryDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Date to check availability for (YYYY-MM-DD). Defaults to next occurrence of each schedule.',
+    example: '2026-02-03',
+  })
+  @IsOptional()
+  @IsString()
+  date?: string;
 }

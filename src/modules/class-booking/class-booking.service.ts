@@ -282,13 +282,16 @@ export class ClassBookingService {
 
           // ============================================
           // 4. DUPLICATE BOOKING CHECK
-          // User cannot book the same class multiple times
+          // User cannot book the same class on overlapping dates
           // ============================================
           const existingBooking = await tx.classBooking.findFirst({
             where: {
               userId: userId,
               classScheduleId: scheduleId,
               status: { notIn: ['cancelled'] },
+              // Date-aware: only check bookings that overlap with the requested date range
+              bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
+              bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
             },
           });
 
@@ -299,13 +302,16 @@ export class ClassBookingService {
           }
 
           // ============================================
-          // 5. CAPACITY CHECK
-          // Use 'capacity' instead of 'maxCapacity'
+          // 5. CAPACITY CHECK (per-occurrence, not all-time)
+          // Count only bookings that overlap with the requested date range
           // ============================================
           const currentBookingsCount = await tx.classBooking.count({
             where: {
               classScheduleId: scheduleId,
               status: { in: ['pending', 'confirmed', 'attended'] },
+              // Date-aware: only count bookings for this specific occurrence
+              bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
+              bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
             },
           });
 
@@ -333,15 +339,29 @@ export class ClassBookingService {
           }
 
           // ============================================
-          // 7. CREATE BOOKING WITH FORCED PENDING STATUS
+          // 7. CREATE OR REACTIVATE BOOKING
+          // Uses upsert to handle cancel-and-rebook:
+          // If a cancelled booking exists for the same (user, schedule, date),
+          // reactivate it instead of inserting a duplicate row.
           // ============================================
-          const newBooking = await tx.classBooking.create({
-            data: {
+          const newBooking = await tx.classBooking.upsert({
+            where: {
+              unique_user_schedule_date_booking: {
+                userId: userId,
+                classScheduleId: scheduleId,
+                bookingStartDate: createClassBookingDto.bookingStartDate!,
+              },
+            },
+            update: {
+              status: 'pending',
+              bookingEndDate: createClassBookingDto.bookingEndDate!,
+            },
+            create: {
               userId: userId,
               classScheduleId: scheduleId,
               bookingStartDate: createClassBookingDto.bookingStartDate!,
               bookingEndDate: createClassBookingDto.bookingEndDate!,
-              status: 'pending', // Always start as pending
+              status: 'pending',
             },
             include: {
               user: true,

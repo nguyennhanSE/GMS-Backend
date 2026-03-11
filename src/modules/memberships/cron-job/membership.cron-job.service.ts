@@ -13,6 +13,7 @@ interface MembershipTier {
 
 @Injectable()
 export class MembershipRecalculationService {
+  private static readonly BATCH_SIZE = 50;
   private readonly logger = new Logger(MembershipRecalculationService.name);
 
   constructor(private readonly prisma: PrismaService) {}
@@ -28,15 +29,14 @@ export class MembershipRecalculationService {
   }
 
   /**
-   * Main method to recalculate all user memberships based on their purchase history
-   * This should be called when:
-   * 1. Admin updates membership minPrice
-   * 2. Scheduled cron job runs
+   * Main method to recalculate all user memberships based on their purchase history.
+   * Only affects AUTO-TIERED memberships. Paid/admin-granted memberships are never touched.
    */
   async recalculateAllUserMemberships(): Promise<{
     totalUsersProcessed: number;
     totalUpdated: number;
     totalCreated: number;
+    skippedPaid: number;
     errors: number;
   }> {
     this.logger.log('Starting membership recalculation for all users');
@@ -45,10 +45,10 @@ export class MembershipRecalculationService {
     let totalUsersProcessed = 0;
     let totalUpdated = 0;
     let totalCreated = 0;
+    let skippedPaid = 0;
     let errors = 0;
 
     try {
-      // 1. Get all membership tiers sorted by minPrice descending
       const membershipTiers = await this.getMembershipTiers();
 
       if (membershipTiers.length === 0) {
@@ -57,50 +57,79 @@ export class MembershipRecalculationService {
           totalUsersProcessed: 0,
           totalUpdated: 0,
           totalCreated: 0,
+          skippedPaid: 0,
           errors: 0,
         };
       }
 
       this.logger.log(`Found ${membershipTiers.length} membership tiers`);
 
-      // 2. Get all users with their total purchase amounts
+      // FIX: Replace N+1 with groupBy aggregation
       const users = await this.getUsersWithPurchaseAmounts();
 
-      this.logger.log(`Processing ${users.length} users`);
+      this.logger.log(`Processing ${users.length} users in batches of ${MembershipRecalculationService.BATCH_SIZE}`);
 
-      // 3. Process each user
-      for (const user of users) {
-        try {
-          const result = await this.recalculateUserMembership(
-            user.id,
-            user.totalPurchaseAmount,
-            membershipTiers,
-          );
+      // Process users in batches to avoid overwhelming the DB connection pool
+      for (
+        let i = 0;
+        i < users.length;
+        i += MembershipRecalculationService.BATCH_SIZE
+      ) {
+        const batch = users.slice(
+          i,
+          i + MembershipRecalculationService.BATCH_SIZE,
+        );
+        const batchNum =
+          Math.floor(i / MembershipRecalculationService.BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(
+          users.length / MembershipRecalculationService.BATCH_SIZE,
+        );
 
-          if (result.action === 'created') {
-            totalCreated++;
-          } else if (result.action === 'updated') {
-            totalUpdated++;
+        for (const user of batch) {
+          try {
+            const result = await this.recalculateUserMembership(
+              user.id,
+              user.totalPurchaseAmount,
+              membershipTiers,
+            );
+
+            if (result.action === 'created') {
+              totalCreated++;
+            } else if (result.action === 'updated') {
+              totalUpdated++;
+            } else if (result.action === 'skipped_paid') {
+              skippedPaid++;
+            }
+
+            totalUsersProcessed++;
+          } catch (error) {
+            this.logger.error(
+              `Error processing user ${user.id}: ${error.message}`,
+              error.stack,
+            );
+            errors++;
           }
-
-          totalUsersProcessed++;
-        } catch (error) {
-          this.logger.error(
-            `Error processing user ${user.id}: ${error.message}`,
-            error.stack,
-          );
-          errors++;
         }
+
+        this.logger.debug(
+          `Batch ${batchNum}/${totalBatches} complete (${batch.length} users)`,
+        );
       }
 
       const duration = Date.now() - startTime;
       this.logger.log(
         `Membership recalculation completed in ${duration}ms. ` +
           `Processed: ${totalUsersProcessed}, Created: ${totalCreated}, ` +
-          `Updated: ${totalUpdated}, Errors: ${errors}`,
+          `Updated: ${totalUpdated}, Skipped (paid): ${skippedPaid}, Errors: ${errors}`,
       );
 
-      return { totalUsersProcessed, totalUpdated, totalCreated, errors };
+      return {
+        totalUsersProcessed,
+        totalUpdated,
+        totalCreated,
+        skippedPaid,
+        errors,
+      };
     } catch (error) {
       this.logger.error('Failed to recalculate memberships', error.stack);
       throw error;
@@ -108,15 +137,21 @@ export class MembershipRecalculationService {
   }
 
   /**
-   * Recalculate membership for a specific user
-   * Updates both UserMembership relation and User.membershipLevel field
+   * Recalculate membership for a specific user.
+   *
+   * SOURCE-AWARE: If the user has a paid or admin-granted active membership,
+   * the cron will NEVER downgrade or overwrite it.
+   *
+   * TRANSACTIONAL: The expire + create path is wrapped in $transaction
+   * to prevent broken state if the process crashes mid-operation.
    */
   async recalculateUserMembership(
     userId: string,
     totalPurchaseAmount: number,
     membershipTiers?: MembershipTier[],
-  ): Promise<{ action: 'created' | 'updated' | 'unchanged' }> {
-    // Get membership tiers if not provided
+  ): Promise<{
+    action: 'created' | 'updated' | 'unchanged' | 'skipped_paid';
+  }> {
     if (!membershipTiers) {
       membershipTiers = await this.getMembershipTiers();
     }
@@ -126,7 +161,6 @@ export class MembershipRecalculationService {
       return { action: 'unchanged' };
     }
 
-    // Determine appropriate membership tier based on purchase amount
     const appropriateTier = this.determineAppropriateMembershipTier(
       totalPurchaseAmount,
       membershipTiers,
@@ -139,25 +173,43 @@ export class MembershipRecalculationService {
       return { action: 'unchanged' };
     }
 
-    // Check if user already has this membership
-    const existingMembership = await this.prisma.userMembership.findFirst({
+    const now = new Date();
+
+    // SOURCE-AWARE CHECK: If user has ANY active paid or admin-granted membership,
+    // the cron must NOT touch it — regardless of what tier the cron thinks they deserve.
+    const paidActiveMembership = await this.prisma.userMembership.findFirst({
       where: {
-        userId: userId,
-        membershipId: appropriateTier.id,
+        userId,
         status: 'normal',
-      },
-      orderBy: {
-        createdAt: 'desc',
+        endDate: { gte: now },
+        OR: [
+          { paymentId: { not: null } },
+          { updatedByAdmin: true },
+        ],
       },
     });
 
-    const now = new Date();
+    if (paidActiveMembership) {
+      this.logger.debug(
+        `User ${userId} has active paid/admin membership "${paidActiveMembership.membershipName}" — skipping`,
+      );
+      return { action: 'skipped_paid' };
+    }
+
+    // Check if user already has this auto-assigned tier and it's still active
+    const existingMembership = await this.prisma.userMembership.findFirst({
+      where: {
+        userId,
+        membershipId: appropriateTier.id,
+        status: 'normal',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
     const oneYearFromNow = new Date();
     oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
 
-    // If user already has this membership and it's still active, check if it needs updating
     if (existingMembership) {
-      // If the membership is still valid and active, just check if it needs updating
       if (
         existingMembership.endDate > now &&
         existingMembership.status === 'normal'
@@ -165,16 +217,13 @@ export class MembershipRecalculationService {
         return { action: 'unchanged' };
       }
 
-      // Update the existing membership (extend validity period)
+      // Extend expired same-tier membership
       await this.prisma.userMembership.update({
-        where: {
-          id: existingMembership.id,
-        },
+        where: { id: existingMembership.id },
         data: {
           endDate: oneYearFromNow,
           status: 'normal',
           level: appropriateTier.level,
-          updatedAt: now,
         },
       });
 
@@ -184,48 +233,45 @@ export class MembershipRecalculationService {
       return { action: 'updated' };
     }
 
-    // Check if user has a different active membership
-    const otherActiveMembership = await this.prisma.userMembership.findFirst({
-      where: {
-        userId: userId,
-        status: 'normal',
-        endDate: { gte: now },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    // If user has a different active membership, expire it
-    if (otherActiveMembership) {
-      await this.prisma.userMembership.update({
+    // FIX: Wrap expire + create in $transaction to prevent broken state on crash
+    await this.prisma.$transaction(async (tx) => {
+      // Check for a different active auto-assigned membership
+      const otherActiveMembership = await tx.userMembership.findFirst({
         where: {
-          id: otherActiveMembership.id,
+          userId,
+          status: 'normal',
+          endDate: { gte: now },
         },
-        data: {
-          status: 'expired',
-          endDate: now,
-          updatedAt: now,
-        },
+        orderBy: { createdAt: 'desc' },
       });
 
-      this.logger.debug(
-        `Expired old membership ${otherActiveMembership.membershipName} for user ${userId}`,
-      );
-    }
+      if (otherActiveMembership) {
+        await tx.userMembership.update({
+          where: { id: otherActiveMembership.id },
+          data: {
+            status: 'expired',
+            endDate: now,
+          },
+        });
 
-    // Create new membership for the user
-    await this.prisma.userMembership.create({
-      data: {
-        userId: userId,
-        membershipId: appropriateTier.id,
-        membershipName: appropriateTier.name,
-        membershipDescription: appropriateTier.description || '',
-        level: appropriateTier.level,
-        status: 'normal',
-        startDate: now,
-        endDate: oneYearFromNow,
-      },
+        this.logger.debug(
+          `Expired old membership ${otherActiveMembership.membershipName} for user ${userId}`,
+        );
+      }
+
+      await tx.userMembership.create({
+        data: {
+          userId,
+          membershipId: appropriateTier.id,
+          membershipName: appropriateTier.name,
+          membershipDescription: appropriateTier.description || '',
+          level: appropriateTier.level,
+          status: 'normal',
+          startDate: now,
+          endDate: oneYearFromNow,
+          // paymentId is null → auto-assigned by cron (distinguishable from paid)
+        },
+      });
     });
 
     this.logger.debug(
@@ -253,101 +299,68 @@ export class MembershipRecalculationService {
   }
 
   /**
-   * Get all users with their total purchase amounts from orders
+   * FIX: Replace N+1 with groupBy aggregation.
+   * Single query to get total purchase amounts per user.
    */
   private async getUsersWithPurchaseAmounts(): Promise<
     Array<{ id: string; totalPurchaseAmount: number }>
   > {
-    // Calculate total purchase amount per user from completed membership payments
-    const result = await this.prisma.$transaction<
-      Array<{ id: string; totalPurchaseAmount: number }>
-    >(async (tx) => {
-      // Get all users with their memberships
-      const users = await tx.user.findMany({
-        select: {
-          id: true,
-          userMembership: {
-            select: {
-              id: true,
-              startDate: true,
-            },
-          },
-        },
-      });
-
-      // Calculate total purchase amount for each user
-      const usersWithAmounts: Array<{
-        id: string;
-        totalPurchaseAmount: number;
-      }> = [];
-
-      for (const user of users) {
-        let totalPurchaseAmount = 0;
-
-        // Sum up all successful payments for this user
-        const payments = await tx.payment.findMany({
-          where: {
-            userId: user.id,
-            targetType: 'MEMBERSHIP',
-            status: 'SUCCESS',
-          },
-          select: {
-            amount: true,
-          },
-        });
-
-        totalPurchaseAmount = payments.reduce(
-          (sum, p) => sum + Number(p.amount),
-          0,
-        );
-
-        usersWithAmounts.push({
-          id: user.id,
-          totalPurchaseAmount,
-        });
-      }
-
-      return usersWithAmounts;
+    // Aggregate all successful membership payments by userId in ONE query
+    const paymentTotals = await this.prisma.payment.groupBy({
+      by: ['userId'],
+      where: {
+        targetType: 'MEMBERSHIP',
+        status: 'SUCCESS',
+      },
+      _sum: {
+        amount: true,
+      },
     });
 
-    return result;
+    // Get all user IDs (some users may have $0 in payments)
+    const allUsers = await this.prisma.user.findMany({
+      select: { id: true },
+    });
+
+    // Build a lookup map from the groupBy results
+    const amountMap = new Map<string, number>();
+    for (const row of paymentTotals) {
+      amountMap.set(row.userId, Number(row._sum.amount ?? 0));
+    }
+
+    return allUsers.map((user) => ({
+      id: user.id,
+      totalPurchaseAmount: amountMap.get(user.id) ?? 0,
+    }));
   }
 
   /**
-   * Determine the appropriate membership tier for a given purchase amount
-   * Returns the highest tier that the user qualifies for
+   * Determine the appropriate membership tier for a given purchase amount.
+   * Returns the highest tier that the user qualifies for.
    */
   private determineAppropriateMembershipTier(
     purchaseAmount: number,
     tiers: MembershipTier[],
   ): MembershipTier | null {
-    // Tiers should be sorted by minPrice descending
-    // Return the first tier where purchase amount >= minPrice
+    // Tiers sorted by minPrice descending — first match is the highest qualifying tier
     for (const tier of tiers) {
       if (purchaseAmount >= tier.minPrice) {
         return tier;
       }
     }
 
-    // If no tier matches, return the lowest tier (last in the sorted array)
+    // Fallback: assign the lowest tier (last in desc-sorted array)
     return tiers.length > 0 ? tiers[tiers.length - 1] : null;
   }
 
   /**
-   * Recalculate memberships for users whose purchase amounts fall within a specific range
-   * Useful after updating a specific membership tier's minPrice
+   * Trigger recalculation after a tier's minPrice is updated.
    */
-  async recalculateMembershipsAfterTierUpdate(updatedTierId: string): Promise<{
-    totalUsersProcessed: number;
-    totalUpdated: number;
-    totalCreated: number;
-    errors: number;
-  }> {
+  async recalculateMembershipsAfterTierUpdate(updatedTierId: string) {
     this.logger.log(
       `Recalculating memberships after tier ${updatedTierId} was updated`,
     );
 
-    // Get the updated tier
     const updatedTier = await this.prisma.membership.findUnique({
       where: { id: updatedTierId },
     });
@@ -358,26 +371,11 @@ export class MembershipRecalculationService {
         totalUsersProcessed: 0,
         totalUpdated: 0,
         totalCreated: 0,
+        skippedPaid: 0,
         errors: 0,
       };
     }
 
-    // Get all tiers to determine affected users
-    const allTiers = await this.getMembershipTiers();
-
-    // Find the next tier (lower minPrice)
-    const sortedTiers = [...allTiers].sort((a, b) => b.minPrice - a.minPrice);
-    const updatedTierIndex = sortedTiers.findIndex(
-      (t) => t.id === updatedTierId,
-    );
-    const nextLowerTier = sortedTiers[updatedTierIndex + 1];
-
-    // Determine the range of users to update
-    const minAmount = nextLowerTier ? nextLowerTier.minPrice : 0;
-    const maxAmount = updatedTier.minPrice;
-
-    // For simplicity, we'll just recalculate all users
-    // In a production system, you might want to optimize this by only processing affected users
-    return await this.recalculateAllUserMemberships();
+    return this.recalculateAllUserMemberships();
   }
 }

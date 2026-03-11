@@ -93,6 +93,7 @@ model Membership {
   name String @unique
   description String?
   minPrice Int @map("min_price")
+  purchasePrice Int @default(0) @map("purchase_price")
   level MembershipLevel @default(BASIC) @map("level")
   userMembership UserMembership[]
   createdAt DateTime @default(now()) @map("created_at")
@@ -119,6 +120,7 @@ model Payment {
   provider          String             @default("STRIPE") @map("provider") @db.VarChar(20)
   providerSessionId String?            @unique @map("provider_session_id")
   providerPaymentId String?            @unique @map("provider_payment_id")
+  checkoutUrl       String?            @map("checkout_url")
 
   // State
   status            PaymentStatus      @default(PENDING) @map("status")
@@ -236,6 +238,7 @@ model ClassSchedule {
   // Capacity and location
   location      String?  @db.VarChar(255)
   capacity      Int      @default(20)
+  price         Int      @default(0) @map("price")
   isActive      Boolean  @default(true) @map("is_active")
   
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)

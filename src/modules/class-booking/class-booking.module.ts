@@ -5,10 +5,12 @@ import { ClassBookingRepository } from './repositories/class-booking.repository'
 import { PrismaService } from 'prisma/prisma.service';
 import { ClassScheduleModule } from '../class-schedule/class-schedule.module';
 import { ClassScheduleService } from '../class-schedule/class-schedule.service';
+import { BookingPaymentConsumer } from './booking-payment.consumer';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
-  imports: [ClassScheduleModule],
-  controllers: [ClassBookingController],
+  imports: [ClassScheduleModule, PaymentModule],
+  controllers: [ClassBookingController, BookingPaymentConsumer],
   providers: [
     ClassBookingService,
     ClassBookingRepository,

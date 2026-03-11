@@ -170,6 +170,30 @@ export class ClassBookingController {
     return responseModel;
   }
 
+  @Post(':id/checkout')
+  @Roles(ERoleName.MEMBER)
+  @ApiOperation({ summary: 'Initiate payment checkout for a booking' })
+  @ApiResponse({ status: 201, description: 'Checkout URL created' })
+  @ApiResponse({
+    status: 400,
+    description: 'Booking not pending or no price set',
+  })
+  @ApiResponse({ status: 403, description: 'Not your booking' })
+  @ApiResponse({ status: 404, description: 'Booking not found' })
+  @ApiParam({ name: 'id', description: 'Booking UUID', type: String })
+  async checkout(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const responseModel = new ResponseModel();
+    const result = await this.classBookingService.initiateCheckout(
+      id,
+      user.sub,
+    );
+    responseModel.setData(result);
+    return responseModel;
+  }
+
   @Get(':id')
   @Roles(ERoleName.ADMIN, ERoleName.STAFF)
   @ApiOperation({ summary: 'Get class booking by ID' })

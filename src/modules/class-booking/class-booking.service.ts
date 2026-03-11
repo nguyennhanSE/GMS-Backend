@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { ClassBookingEntity } from './entities/class-booking.entity';
 import {
@@ -21,15 +22,20 @@ import {
 import { ClassScheduleService } from '../class-schedule/class-schedule.service';
 import { ScheduleExceptionService } from '../class-schedule/schedule-exception.service';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { PaymentService } from '../payment/payment.service';
 import { Prisma } from '@prisma/client';
+import { BOOKING_STATUS } from './constants/booking-status.constants';
 
 @Injectable()
 export class ClassBookingService {
+  private readonly logger = new Logger(ClassBookingService.name);
+
   constructor(
     private readonly classBookingRepository: ClassBookingRepository,
     private readonly classScheduleService: ClassScheduleService,
     private readonly scheduleExceptionService: ScheduleExceptionService,
     private readonly prisma: PrismaService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   /**
@@ -480,5 +486,121 @@ export class ClassBookingService {
     await this.classBookingRepository.delete(id);
 
     return { message: `Class booking ${id} deleted successfully` };
+  }
+
+  // ============================================
+  // SYSTEM-LEVEL METHODS (Payment Consumer)
+  // No ownership/admin guards — called by RabbitMQ consumer
+  // ============================================
+
+  /**
+   * Confirm a booking after successful payment.
+   * Bypasses user-facing guards — system-triggered only.
+   * @throws NotFoundException if booking does not exist
+   */
+  async confirmByPayment(bookingId: string): Promise<ClassBookingEntity> {
+    const booking = await this.findOne(bookingId);
+
+    if (booking.status === BOOKING_STATUS.CONFIRMED) {
+      this.logger.log(`Booking ${bookingId} already confirmed — skipping`);
+      return booking;
+    }
+
+    if (booking.status !== BOOKING_STATUS.PENDING) {
+      this.logger.warn(
+        `Booking ${bookingId} is '${booking.status}', cannot confirm`,
+      );
+      return booking;
+    }
+
+    const updated = await this.classBookingRepository.update(bookingId, {
+      status: BOOKING_STATUS.CONFIRMED,
+    });
+
+    this.logger.log(`Booking ${bookingId} confirmed by payment`);
+    return updated;
+  }
+
+  /**
+   * Cancel a booking after payment failure or refund.
+   * Bypasses user-facing guards — system-triggered only.
+   * @throws NotFoundException if booking does not exist
+   */
+  async cancelByPayment(
+    bookingId: string,
+    reason: string,
+  ): Promise<ClassBookingEntity> {
+    const booking = await this.findOne(bookingId);
+
+    if (booking.status === BOOKING_STATUS.CANCELLED) {
+      this.logger.log(`Booking ${bookingId} already cancelled — skipping`);
+      return booking;
+    }
+
+    if (booking.status === BOOKING_STATUS.ATTENDED) {
+      this.logger.warn(
+        `Booking ${bookingId} is 'attended', cannot cancel by payment`,
+      );
+      return booking;
+    }
+
+    const updated = await this.classBookingRepository.update(bookingId, {
+      status: BOOKING_STATUS.CANCELLED,
+    });
+
+    this.logger.log(
+      `Booking ${bookingId} cancelled by payment (reason: ${reason})`,
+    );
+    return updated;
+  }
+
+  /**
+   * Initiate payment checkout for a booking.
+   * Validates ownership and status, derives price server-side.
+   */
+  async initiateCheckout(
+    bookingId: string,
+    userId: string,
+  ): Promise<{ checkoutUrl: string }> {
+    const booking = await this.findOne(bookingId);
+
+    if (booking.userId !== userId) {
+      throw new ForbiddenException(
+        "Cannot checkout for another user's booking",
+      );
+    }
+
+    if (booking.status !== BOOKING_STATUS.PENDING) {
+      throw new BadRequestException(
+        `Booking is '${booking.status}', only pending bookings can be checked out`,
+      );
+    }
+
+    // Derive price from schedule (server-side — never trust client)
+    const schedule = await this.prisma.classSchedule.findUnique({
+      where: { id: booking.classScheduleId },
+      select: { price: true },
+    });
+
+    if (!schedule || schedule.price <= 0) {
+      throw new BadRequestException(
+        'This class has no price configured. Contact admin.',
+      );
+    }
+
+    const result = await this.paymentService.createCheckout(userId, {
+      targetType: 'CLASS_BOOKING' as any,
+      targetId: bookingId,
+      amount: schedule.price,
+      currency: 'VND',
+    });
+
+    if (!result.checkoutUrl) {
+      throw new BadRequestException(
+        'Checkout session could not be created. Please try again.',
+      );
+    }
+
+    return { checkoutUrl: result.checkoutUrl };
   }
 }

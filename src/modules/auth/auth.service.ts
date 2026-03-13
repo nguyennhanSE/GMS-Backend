@@ -39,6 +39,10 @@ export class AuthService {
                 throw new BadRequestException("User not exist");
             }
 
+            if (user.status !== 'active') {
+                throw new UnauthorizedException("Account is inactive or banned");
+            }
+
             if (password) {
                 if (!user.password) {
                     throw new UnauthorizedException("Invalid credentials");
@@ -55,17 +59,21 @@ export class AuthService {
             const accessTokenPayload: TokenPayload = {
                 sub: user.id,
                 tokenType: tokenType.AccessToken,
-                username: account,
+                username: user.id,
                 email: user.email,
                 roles
             }; 
             const refreshTokenPayload: TokenPayload = {
                 sub: user.id,
                 tokenType: tokenType.RefreshToken,
-                username: account,
+                username: user.id,
                 email: user.email,
                 roles
             };
+
+            const refreshExpiry = rememberMe
+                ? config.REFRESH_TOKEN_REMEMBER_EXPIRES_IN
+                : config.REFRESH_TOKEN_EXPIRES_IN;
 
             const [accessToken, refreshToken] = await Promise.all([
                 this.authRepository.generateToken(accessTokenPayload, {
@@ -74,7 +82,7 @@ export class AuthService {
                 } as any),
                 this.authRepository.generateToken(refreshTokenPayload, {
                     secret: config.JWT_SECRET_REFRESH_TOKEN,
-                    expiresIn: config.REFRESH_TOKEN_EXPIRES_IN,
+                    expiresIn: refreshExpiry,
                 } as any),
             ]);
 
@@ -181,6 +189,11 @@ export class AuthService {
             this.logger.debug(`[${this.context}] refreshToken user fetched`, { user });
             if (!user) {
                 throw new NotFoundException("User not found");
+            }
+
+            if (user.status !== 'active') {
+                await this.authRepository.removeAllSessionOfUser(sub);
+                throw new UnauthorizedException("Account is inactive or banned");
             }
             const roles = await this.roleService.getUserRoles(user.id);
 

@@ -8,6 +8,7 @@ import { PrismaService } from "prisma/prisma.service";
 import { TokenPayload } from "../../../libs/constants/interface";
 import { RefreshTokenDto } from "../dto/auth.dto";
 import { expToDate } from "src/utils/date";
+import { sha256Hash } from "src/utils/hash";
 
 
 @Injectable()
@@ -76,12 +77,13 @@ export class AuthRepository {
                 throw e;
             }
 
-            await this.prisma.session.deleteMany({ where: { refreshToken: token } });
+            const hashedToken = sha256Hash(token);
+            await this.prisma.session.deleteMany({ where: { refreshToken: hashedToken } });
 
             const expiredAt = expToDate(exp)
 
             const created = await this.prisma.session.create({
-                data: { userId: sub, refreshToken: token, expiredAt, ip },
+                data: { userId: sub, refreshToken: hashedToken, expiredAt, ip },
             });
 
             const dto = this.toDto(created);
@@ -114,12 +116,13 @@ export class AuthRepository {
             }
 
             const expiredAt = expToDate(exp)
+            const hashedToken = sha256Hash(token);
 
             const created = await this.prisma.session.update({
                 where: {
                     id
                 },
-                data: { userId: sub, refreshToken: token, expiredAt, ip },
+                data: { userId: sub, refreshToken: hashedToken, expiredAt, ip },
             });
 
             const dto = this.toDto(created);
@@ -138,7 +141,7 @@ export class AuthRepository {
         try {
             this.logger.debug(`[${this.context}] findToken start`, meta);
 
-            const found = await this.prisma.session.findFirst({ where: { refreshToken: token } });
+            const found = await this.prisma.session.findFirst({ where: { refreshToken: sha256Hash(token) } });
             if (!found) {
                 this.logger.debug(`[${this.context}] findToken not found`, meta);
                 return null;
@@ -155,11 +158,11 @@ export class AuthRepository {
     async deleteToken(token: string): Promise<void> {
         const meta = { token };
         try {
-            this.logger.debug(`[${this.context}] findToken start`, meta);
-            await this.prisma.session.delete({ where: { refreshToken: token } })
-            this.logger.debug(`[${this.context}] findToken done`, { ...meta });
+            this.logger.debug(`[${this.context}] deleteToken start`, meta);
+            await this.prisma.session.delete({ where: { refreshToken: sha256Hash(token) } })
+            this.logger.debug(`[${this.context}] deleteToken done`, { ...meta });
         } catch (error) {
-            this.logger.error(`[${this.context}] findToken failed`, { ...meta, error });
+            this.logger.error(`[${this.context}] deleteToken failed`, { ...meta, error });
             throw error
         }
     }
@@ -176,12 +179,12 @@ export class AuthRepository {
         }
     }
     async markRefreshTokenUsed(refreshToken: string, sessionId: string): Promise<void> {
-        const meta = { refreshToken, sessionId }
+        const meta = { sessionId }
         try {
             this.logger.debug(`[${this.context} markRefreshTokenUsed start]`, { ...meta })
             await this.prisma.refreshTokenUsed.create({
                 data: {
-                    refreshToken, sessionId
+                    refreshToken: sha256Hash(refreshToken), sessionId
                 }
             })
 
@@ -192,45 +195,20 @@ export class AuthRepository {
             throw error
         }
     }
-    async isRefreshTokenUsed(refreshToken: string): Promise<RefreshTokenDto | null> {
+    async isRefreshTokenUsed(refreshToken: string): Promise<boolean> {
         const meta = { refreshToken }
         try {
             this.logger.debug(`[${this.context} isRefreshTokenUsed start]`, { ...meta })
             const refreshTokenUsed = await this.prisma.refreshTokenUsed.findFirst({
                 where: {
-                    refreshToken
+                    refreshToken: sha256Hash(refreshToken)
                 }
             })
             this.logger.debug(`[${this.context} isRefreshTokenUsed done]`, { ...meta })
-            if (!refreshTokenUsed) {
-                return null;
-            }
-            // RefreshTokenUsed doesn't match RefreshTokenDto structure, return null or transform
-            return null;
-
+            return !!refreshTokenUsed;
         } catch (error) {
             this.logger.error(`[${this.context} isRefreshTokenUsed failed]`, { ...meta, error })
             throw error
         }
-    }
-
-
-    private safeSignOpts(opts: JwtSignOptions) {
-        if (!opts) return undefined;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { secret, privateKey, expiresIn, ...rest } = opts;
-        return { ...rest, expiresIn: this.maskExpires(expiresIn) };
-    }
-
-    private safeVerifyOpts(opts: JwtVerifyOptions) {
-        if (!opts) return undefined;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { secret, publicKey, ...rest } = opts;
-        return rest;
-    }
-
-    private maskExpires(expiresIn: JwtSignOptions["expiresIn"]) {
-        if (expiresIn == null) return undefined;
-        return typeof expiresIn === "string" ? expiresIn : `${expiresIn}s`;
     }
 }

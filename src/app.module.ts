@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './modules/user/user.module';
@@ -21,6 +22,7 @@ import { PaymentModule } from './modules/payment/payment.module';
 @Module({
   imports: [
     ScheduleModule.forRoot(), // Enable scheduled tasks (cron jobs)
+    EventEmitterModule.forRoot(), // Enable cross-module event communication
     UserModule,
     AuthModule,
     GuardModule,

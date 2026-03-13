@@ -5,10 +5,15 @@ import { UserRepository } from './repositories/user.repository';
 import { IPaginate, PaginateOptions } from '../../libs/models/paginate/pagimate.model';
 import { ERoleName } from '../roles/enums/role.enum';
 import * as bcrypt from 'bcrypt';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { UserBannedEvent, USER_EVENTS } from 'src/common/events/user.events';
 
 @Injectable()
 export class UserService {
-  constructor(private readonly userRepository: UserRepository) {}
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   /**
    * Get user by account (id)
@@ -74,12 +79,12 @@ export class UserService {
    */
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserEntity> {
     // Check if user exists
-    await this.findOne(id);
+    const existingUser = await this.findOne(id);
 
     // Check if email is being updated and if it's already taken by another user
     if (updateUserDto.email) {
-      const existingUser = await this.userRepository.getUserByEmail(updateUserDto.email);
-      if (existingUser && existingUser.id !== id) {
+      const emailUser = await this.userRepository.getUserByEmail(updateUserDto.email);
+      if (emailUser && emailUser.id !== id) {
         throw new BadRequestException('Email is already taken by another user');
       }
     }
@@ -97,7 +102,18 @@ export class UserService {
       ...(hashedPassword && { password: hashedPassword }),
     };
 
-    return this.userRepository.updateUser(id, updateData);
+    const updatedUser = await this.userRepository.updateUser(id, updateData);
+
+    // Emit user.banned event if status changed to non-ACTIVE
+    if (
+      updateUserDto.status &&
+      updateUserDto.status !== 'active' &&
+      existingUser.status !== updateUserDto.status
+    ) {
+      this.eventEmitter.emit(USER_EVENTS.BANNED, new UserBannedEvent(id));
+    }
+
+    return updatedUser;
   }
 
   /**

@@ -10,39 +10,7 @@ import {
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export interface LoginNaverDto {
-  code: string;
-}
 
-export interface NaverTokenResponse {
-  access_token?: string;
-  refresh_token?: string;
-  token_type?: string;
-  expires_in?: string;
-  error?: string;
-  error_description?: string;
-}
-
-export interface NaverProfileInner {
-  id: string;
-  email?: string;
-  name?: string;
-  nickname?: string;
-  profile_image?: string;
-  [key: string]: unknown;
-}
-
-export interface NaverProfileResponse {
-  resultcode: string;
-  message: string;
-  response?: NaverProfileInner;
-}
-
-export interface SimpleFetchResponse {
-  ok: boolean;
-  status: number;
-  json(): Promise<unknown>;
-}
 
 /** ===================== LOGIN ===================== */
 export class LoginDto {

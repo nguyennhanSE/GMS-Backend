@@ -2,19 +2,19 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Patch,
   Param,
   Delete,
   Query,
+  Logger,
 } from '@nestjs/common';
 import { TrainerService } from './trainer.service';
 import { CreateTrainerDto } from './dto/create-trainer.dto';
 import { UpdateTrainerDto } from './dto/update-trainer.dto';
-import {
-  GetTrainersQueryDto,
-  UpdateTrainerAvailabilityDto,
-} from './dto/trainer-query.dto';
+import { GetTrainersQueryDto } from './dto/trainer-query.dto';
+import { SetTrainerAvailabilityDto } from './dto/trainer-availability.dto';
 import { ResponseModel } from '../../libs/models/response/response.model';
 import { toTrainerResponse } from './mapper/trainer.mapper';
 import {
@@ -31,6 +31,8 @@ import { ERoleName } from '../roles/enums/role.enum';
 @ApiBearerAuth()
 @Controller('trainer')
 export class TrainerController {
+  private readonly logger = new Logger(TrainerController.name);
+
   constructor(private readonly trainerService: TrainerService) {}
 
   @Post('create')
@@ -43,15 +45,8 @@ export class TrainerController {
   })
   async create(@Body() createTrainerDto: CreateTrainerDto) {
     const responseModel = new ResponseModel();
-
-    try {
-      const trainer = await this.trainerService.create(createTrainerDto);
-      const result = toTrainerResponse(trainer);
-      responseModel.setData(result);
-    } catch (error) {
-      throw error;
-    }
-
+    const trainer = await this.trainerService.create(createTrainerDto);
+    responseModel.setData(toTrainerResponse(trainer));
     return responseModel;
   }
 
@@ -62,48 +57,41 @@ export class TrainerController {
   async list(@Query() q: GetTrainersQueryDto) {
     const responseModel = new ResponseModel();
 
-    try {
-      const {
-        page,
-        limit,
-        sort,
-        sortBy,
-        counted,
-        q: search,
-        email,
-        searchField,
-      } = q;
+    const {
+      page,
+      limit,
+      sort,
+      sortBy,
+      counted,
+      q: search,
+      email,
+      searchField,
+    } = q;
 
-      const pageNum = page
-        ? typeof page === 'string'
-          ? parseInt(page, 10)
-          : page
-        : 1;
-      const limitNum = limit
-        ? typeof limit === 'string'
-          ? parseInt(limit, 10)
-          : limit
-        : 10;
+    const pageNum = page
+      ? typeof page === 'string'
+        ? parseInt(page, 10)
+        : page
+      : 1;
+    const limitNum = limit
+      ? typeof limit === 'string'
+        ? parseInt(limit, 10)
+        : limit
+      : 10;
 
-      const data = await this.trainerService.getTrainerPaginate(
-        {
-          page: pageNum,
-          limit: limitNum,
-          sort: sort || 'asc',
-          sortBy: sortBy || 'createdAt',
-        },
-        { q: search, email, searchField },
-        { counted: counted ?? true },
-      );
+    const data = await this.trainerService.getTrainerPaginate(
+      {
+        page: pageNum,
+        limit: limitNum,
+        sort: sort || 'asc',
+        sortBy: sortBy || 'createdAt',
+      },
+      { q: search, email, searchField },
+      { counted: counted ?? true },
+    );
 
-      const docs = data.docs.map((e) => toTrainerResponse(e));
-
-      const result = { ...data, docs };
-      responseModel.setData(result);
-    } catch (error) {
-      throw error;
-    }
-
+    const docs = data.docs.map((e) => toTrainerResponse(e));
+    responseModel.setData({ ...data, docs });
     return responseModel;
   }
 
@@ -115,15 +103,8 @@ export class TrainerController {
   @ApiParam({ name: 'id', description: 'Trainer ID (UUID)', type: String })
   async findOne(@Param('id') id: string) {
     const responseModel = new ResponseModel();
-
-    try {
-      const trainer = await this.trainerService.findOne(id);
-      const result = toTrainerResponse(trainer);
-      responseModel.setData(result);
-    } catch (error) {
-      throw error;
-    }
-
+    const trainer = await this.trainerService.findOne(id);
+    responseModel.setData(toTrainerResponse(trainer));
     return responseModel;
   }
 
@@ -139,15 +120,8 @@ export class TrainerController {
     @Body() updateTrainerDto: UpdateTrainerDto,
   ) {
     const responseModel = new ResponseModel();
-
-    try {
-      const trainer = await this.trainerService.update(id, updateTrainerDto);
-      const result = toTrainerResponse(trainer);
-      responseModel.setData(result);
-    } catch (error) {
-      throw error;
-    }
-
+    const trainer = await this.trainerService.update(id, updateTrainerDto);
+    responseModel.setData(toTrainerResponse(trainer));
     return responseModel;
   }
 
@@ -159,47 +133,35 @@ export class TrainerController {
   @ApiParam({ name: 'id', description: 'Trainer ID (UUID)', type: String })
   async remove(@Param('id') id: string) {
     const responseModel = new ResponseModel();
-
-    try {
-      const result = await this.trainerService.remove(id);
-      responseModel.setData(result);
-    } catch (error) {
-      throw error;
-    }
-
+    const result = await this.trainerService.remove(id);
+    responseModel.setData(result);
     return responseModel;
   }
 
-  @Get(':id/available-time')
+  // ============================================
+  // AVAILABILITY ENDPOINTS (relational table)
+  // ============================================
+
+  @Get(':id/availability')
   @Roles(ERoleName.ADMIN, ERoleName.STAFF, ERoleName.TRAINER, ERoleName.MEMBER)
-  @ApiOperation({ summary: 'Get trainer available time slots' })
+  @ApiOperation({ summary: 'Get trainer availability slots' })
   @ApiResponse({
     status: 200,
-    description: 'Available time retrieved successfully',
+    description: 'Availability retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'Trainer not found' })
   @ApiParam({ name: 'id', description: 'Trainer ID (UUID)', type: String })
-  async getAvailableTime(@Param('id') id: string) {
+  async getAvailability(@Param('id') id: string) {
     const responseModel = new ResponseModel();
-
-    try {
-      const availableTime =
-        await this.trainerService.getTrainerAvailableTime(id);
-      responseModel.setData({
-        trainerId: id,
-        availableTime,
-      });
-    } catch (error) {
-      throw error;
-    }
-
+    const availability = await this.trainerService.getAvailabilities(id);
+    responseModel.setData({ trainerId: id, availability });
     return responseModel;
   }
 
-  @Patch(':id/availability')
+  @Put(':id/availability')
   @Roles(ERoleName.ADMIN, ERoleName.TRAINER)
   @ApiOperation({
-    summary: 'Update trainer availability (time slots and days)',
+    summary: 'Set trainer availability (replaces all existing slots)',
   })
   @ApiResponse({
     status: 200,
@@ -207,37 +169,42 @@ export class TrainerController {
   })
   @ApiResponse({ status: 404, description: 'Trainer not found' })
   @ApiParam({ name: 'id', description: 'Trainer ID (UUID)', type: String })
-  async updateAvailability(
+  async setAvailability(
     @Param('id') id: string,
-    @Body() updateAvailabilityDto: UpdateTrainerAvailabilityDto,
+    @Body() dto: SetTrainerAvailabilityDto,
   ) {
     const responseModel = new ResponseModel();
+    const availability = await this.trainerService.setAvailabilities(
+      id,
+      dto.slots,
+    );
+    responseModel.setData({ trainerId: id, availability });
+    return responseModel;
+  }
 
-    try {
-      let trainer = await this.trainerService.findOne(id);
-
-      // Update available time if provided
-      if (updateAvailabilityDto.trainerAvailableTime !== undefined) {
-        trainer = await this.trainerService.updateTrainerAvailableTime(
-          id,
-          updateAvailabilityDto.trainerAvailableTime,
-        );
-      }
-
-      // Update available days if provided
-      if (updateAvailabilityDto.trainerAvailableDays !== undefined) {
-        trainer = await this.trainerService.updateTrainerAvailableDays(
-          id,
-          updateAvailabilityDto.trainerAvailableDays,
-        );
-      }
-
-      const result = toTrainerResponse(trainer);
-      responseModel.setData(result);
-    } catch (error) {
-      throw error;
-    }
-
+  @Delete(':id/availability/:slotId')
+  @Roles(ERoleName.ADMIN, ERoleName.TRAINER)
+  @ApiOperation({ summary: 'Delete a single availability slot' })
+  @ApiResponse({
+    status: 200,
+    description: 'Availability slot deleted successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Trainer or slot not found' })
+  @ApiParam({ name: 'id', description: 'Trainer ID (UUID)', type: String })
+  @ApiParam({
+    name: 'slotId',
+    description: 'Availability slot ID (UUID)',
+    type: String,
+  })
+  async deleteAvailabilitySlot(
+    @Param('id') id: string,
+    @Param('slotId') slotId: string,
+  ) {
+    const responseModel = new ResponseModel();
+    await this.trainerService.deleteAvailability(id, slotId);
+    responseModel.setData({
+      message: `Availability slot ${slotId} deleted successfully`,
+    });
     return responseModel;
   }
 }

@@ -5,13 +5,13 @@ import { TrainerRepository } from './repositories/trainer.repository';
 import { TrainerEntity } from './entities/trainer.entity';
 import { IPaginate, PaginateOptions } from '../../libs/models/paginate/pagimate.model';
 import * as bcrypt from 'bcrypt';
-import { JsonValue } from '@prisma/client/runtime/client';
-
-interface TrainerFilterDto {
-  q?: string;
-  email?: string;
-  searchField?: string;
-}
+import { TrainerAvailabilitySlotDto } from './dto/trainer-availability.dto';
+import { TrainerFilterDto } from './dto/trainer-filter.dto';
+import { DayOfWeek, TrainerAvailability } from '@prisma/client';
+import {
+  dayOfWeekEnumToInt,
+  formatTimeToString,
+} from './utils/day-of-week.util';
 
 @Injectable()
 export class TrainerService {
@@ -27,8 +27,8 @@ export class TrainerService {
       throw new BadRequestException('Trainer with this email already exists');
     }
 
-    // Generate a default password (should be changed by trainer on first login)
-    const password = await bcrypt.hash('trainer123', 10);
+    // Hash the admin-provided password
+    const password = await bcrypt.hash(createTrainerDto.password, 10);
 
     return this.trainerRepository.createTrainer({
       ...createTrainerDto,
@@ -105,43 +105,85 @@ export class TrainerService {
     return { message: `Trainer ${id} deleted successfully` };
   }
 
-  /**
-   * Get trainer available time
-   */
-  async getTrainerAvailableTime(id: string): Promise<JsonValue | null> {
-    // Check if trainer exists
-    await this.findOne(id);
+  // ============================================
+  // AVAILABILITY (relational TrainerAvailability table)
+  // ============================================
 
-    return this.trainerRepository.getTrainerAvailableTime(id);
+  /**
+   * Get all availability slots for a trainer
+   */
+  async getAvailabilities(id: string): Promise<TrainerAvailability[]> {
+    await this.findOne(id);
+    return this.trainerRepository.getAvailabilities(id);
   }
 
   /**
-   * Update trainer available time
+   * Bulk set availability slots (delete all existing, create new)
    */
-  async updateTrainerAvailableTime(
+  async setAvailabilities(
     id: string,
-    trainerAvailableTime: Record<string, any>[]
-  ): Promise<TrainerEntity> {
-    // Check if trainer exists
-    const trainer = await this.findOne(id);
-
-    return this.trainerRepository.updateTrainer(id, {
-      trainerAvailableTime: trainerAvailableTime as any,
-    });
+    slots: TrainerAvailabilitySlotDto[],
+  ): Promise<TrainerAvailability[]> {
+    await this.findOne(id);
+    return this.trainerRepository.setAvailabilities(id, slots);
   }
 
   /**
-   * Update trainer available days
+   * Delete a single availability slot
    */
-  async updateTrainerAvailableDays(
-    id: string,
-    trainerAvailableDays: string[]
-  ): Promise<TrainerEntity> {
-    // Check if trainer exists
-    await this.findOne(id);
+  async deleteAvailability(trainerId: string, slotId: string): Promise<void> {
+    await this.findOne(trainerId);
+    return this.trainerRepository.deleteAvailability(trainerId, slotId);
+  }
 
-    return this.trainerRepository.updateTrainer(id, {
-      trainerAvailableDays,
-    });
+  /**
+   * Check if trainer is within working hours for a given day and time range.
+   * This is Layer 1 ONLY — working hours check.
+   * Schedule conflict checking (Layer 2) is handled by ClassScheduleService.
+   */
+  async isWithinWorkingHours(
+    trainerId: string,
+    dayOfWeek: DayOfWeek,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<{ withinHours: boolean; reason?: string }> {
+    const dayInt = dayOfWeekEnumToInt(dayOfWeek);
+
+    const availabilities = await this.trainerRepository.getAvailabilities(trainerId);
+
+    // Filter to the requested day + isAvailable = true
+    const daySlots = availabilities.filter(
+      (a) => a.dayOfWeek === dayInt && a.isAvailable,
+    );
+
+    if (daySlots.length === 0) {
+      return {
+        withinHours: false,
+        reason: `Trainer does not work on ${dayOfWeek}`,
+      };
+    }
+
+    // Check if the requested time window fits within any available slot
+    const requestStartMinutes = startTime.getUTCHours() * 60 + startTime.getUTCMinutes();
+    const requestEndMinutes = endTime.getUTCHours() * 60 + endTime.getUTCMinutes();
+
+    for (const slot of daySlots) {
+      const slotStartMinutes = slot.startTime.getUTCHours() * 60 + slot.startTime.getUTCMinutes();
+      const slotEndMinutes = slot.endTime.getUTCHours() * 60 + slot.endTime.getUTCMinutes();
+
+      if (requestStartMinutes >= slotStartMinutes && requestEndMinutes <= slotEndMinutes) {
+        return { withinHours: true };
+      }
+    }
+
+    // Build reason with available slots info
+    const slotsInfo = daySlots
+      .map((s) => `${formatTimeToString(s.startTime)}-${formatTimeToString(s.endTime)}`)
+      .join(', ');
+
+    return {
+      withinHours: false,
+      reason: `Trainer works ${slotsInfo} on ${dayOfWeek}, requested ${formatTimeToString(startTime)}-${formatTimeToString(endTime)}`,
+    };
   }
 }

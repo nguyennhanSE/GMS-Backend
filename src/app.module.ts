@@ -18,6 +18,7 @@ import { ClassBookingModule } from './modules/class-booking/class-booking.module
 import { TrainerModule } from './modules/trainer/trainer.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { PaymentModule } from './modules/payment/payment.module';
     TrainerModule,
     MembershipsModule,
     PaymentModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [

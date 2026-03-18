@@ -1,6 +1,5 @@
 import { TrainerEntity } from "../entities/trainer.entity";
 import { User, Prisma } from "@prisma/client";
-import { JsonValue } from "@prisma/client/runtime/client";
 import { CreateTrainerDto } from "../dto/create-trainer.dto";
 import { RoleInfo, MembershipInfo } from "../../user/entities/user.entity";
 
@@ -17,8 +16,6 @@ type TrainerWithRelations = Prisma.UserGetPayload<{
 export function toTrainerEntity(user: User): TrainerEntity {
     return {
         ...user,
-        trainerAvailableTime: user?.trainerAvailableTime as JsonValue | null,
-        trainerAvailableDays: user?.trainerAvailableDays as string[] | null,
         roles: [],
         memberships: [],
     };
@@ -31,12 +28,10 @@ export function toTrainerEntityWithRelations(user: TrainerWithRelations): Traine
     // Extract unique roles
     const roleMap = new Map<string, RoleInfo>();
 
-    // Extract roles
     if (user.userRole) {
         user.userRole.forEach((userRole) => {
             const role = userRole.role as unknown as { id: string; name: string; description: string | null };
             
-            // Add role if not already added
             if (!roleMap.has(role.id)) {
                 roleMap.set(role.id, {
                     id: role.id,
@@ -53,7 +48,6 @@ export function toTrainerEntityWithRelations(user: TrainerWithRelations): Traine
         user.userMembership.forEach((userMembership) => {
             const membership = userMembership.membership;
             
-            // Add membership with basic info
             memberships.push({
                 id: membership.id,
                 name: membership.name,
@@ -74,8 +68,6 @@ export function toTrainerEntityWithRelations(user: TrainerWithRelations): Traine
         address: user.address,
         status: user.status,
         createdAt: user.createdAt,
-        trainerAvailableTime: user.trainerAvailableTime as JsonValue | null,
-        trainerAvailableDays: user.trainerAvailableDays as string[] | null,
         roles: Array.from(roleMap.values()),
         memberships: memberships,
     };
@@ -95,8 +87,6 @@ export function toPrismaTrainerCreateInput(dto: CreateTrainerDto & { password: s
         dob: dto.dob ?? null,
         address: dto.address ?? null,
         status: dto.status ?? null,
-        trainerAvailableTime: dto.trainerAvailableTime as any ?? null,
-        trainerAvailableDays: dto.trainerAvailableDays ?? [],
     };
 }
 

@@ -176,7 +176,6 @@ export class UserController {
   }
 
   @Get(':userId/roles')
-  @Roles(ERoleName.ADMIN)
   @ApiOperation({ summary: 'Get user roles' })
   @ApiResponse({
     status: 200,

@@ -1,16 +1,27 @@
-import { Injectable } from "@nestjs/common";
-import { PrismaService } from "prisma/prisma.service";
-import { UserEntity } from "../entities/user.entity";
-import { CreateUserDto, UserFilterDto } from "../dto/user.dto";
-import { toUserEntity, toPrismaUserCreateInput, toUserEntityWithRelations } from "../mapper/user.mapper";
-import { IPaginate, PaginateOptions } from "../../../libs/models/paginate/pagimate.model";
-import { Prisma } from "@prisma/client";
-import { ERoleName } from "../../roles/enums/role.enum";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { UserEntity } from '../entities/user.entity';
+import { CreateUserDto, UserFilterDto } from '../dto/user.dto';
+import {
+  toPrismaUserCreateInput,
+  toUserEntityWithRelations,
+} from '../mapper/user.mapper';
+import {
+  IPaginate,
+  PaginateOptions,
+} from '../../../libs/models/paginate/pagimate.model';
+import { Prisma } from '@prisma/client';
+import { ERoleName } from '../../roles/enums/role.enum';
+import { AppLogger } from '../../../libs/logger';
 
 @Injectable()
 export class UserRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly context = UserRepository.name;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logger: AppLogger,
+  ) {}
 
   /**
    * Get user by account (id) with relations
@@ -43,8 +54,11 @@ export class UserRepository {
       const userEntity = toUserEntityWithRelations(user);
       return userEntity;
     } catch (error) {
-      // Log Prisma errors for debugging
-      console.error('Prisma error in getUserByAccount:', error);
+      this.logger.error(
+        `[${this.context}] Failed to fetch user by account`,
+        { account: account.trim() },
+        this.context,
+      );
       throw error;
     }
   }
@@ -77,11 +91,9 @@ export class UserRepository {
   /**
    * Create a new user
    */
-  async createUser(createUserDto: CreateUserDto & { password?: string }): Promise<UserEntity> {
-    // Default role to USER if not provided
-    const roleName = createUserDto.role || ERoleName.ADMIN;
+  async createUser(createUserDto: CreateUserDto): Promise<UserEntity> {
+    const roleName = createUserDto.role ?? ERoleName.MEMBER;
 
-    // Find the role in the database
     const role = await this.prisma.role.findUnique({
       where: { name: roleName },
     });
@@ -94,7 +106,7 @@ export class UserRepository {
     const createdUserId = await this.prisma.$transaction(async (tx) => {
       // Create the user
       const createdUser = await tx.user.create({
-        data: toPrismaUserCreateInput({ ...createUserDto, password: createUserDto.password ?? '' }),
+        data: toPrismaUserCreateInput(createUserDto),
       });
 
       // Assign role to user
@@ -135,7 +147,10 @@ export class UserRepository {
   /**
    * Update user
    */
-  async updateUser(userId: string, updateData: Partial<UserEntity> & { role?: ERoleName; password?: string }): Promise<UserEntity> {
+  async updateUser(
+    userId: string,
+    updateData: Partial<UserEntity> & { role?: ERoleName; password?: string },
+  ): Promise<UserEntity> {
     // Check if user exists
     const existingUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -237,7 +252,7 @@ export class UserRepository {
 
   async getUserPaginate(
     filter: UserFilterDto,
-    options: PaginateOptions
+    options: PaginateOptions,
   ): Promise<IPaginate<UserEntity>> {
     const page = options.page || 1;
     const limit = options.limit || 10;
@@ -266,7 +281,11 @@ export class UserRepository {
     }
 
     if (search) {
-      console.log(`[DEBUG] Searching for: "${search}", searchField: "${searchField || 'none'}"`);
+      this.logger.debug(
+        `[${this.context}] Searching users`,
+        { search, searchField: searchField || 'none' },
+        this.context,
+      );
       if (searchField) {
         // Search in specific field (only allow known string fields)
         if (searchField === 'firstName') {
@@ -288,13 +307,23 @@ export class UserRepository {
           { email: { contains: search, mode: 'insensitive' } },
         ];
       }
-      console.log('[DEBUG] Where clause:', JSON.stringify(where, null, 2));
+      this.logger.debug(
+        `[${this.context}] User search where clause`,
+        JSON.stringify(where),
+        this.context,
+      );
     }
 
     // Build orderBy
-    const allowedSortFields = ['id', 'firstName', 'lastName', 'email', 'createdAt'];
+    const allowedSortFields = [
+      'id',
+      'firstName',
+      'lastName',
+      'email',
+      'createdAt',
+    ];
     const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
-    
+
     // Map sort field to Prisma orderBy
     let orderBy: Prisma.UserOrderByWithRelationInput;
     if (sortField === 'id') {
@@ -315,9 +344,11 @@ export class UserRepository {
     const skip = (page - 1) * limit;
 
     // Execute queries with relations
-    console.log('skip', skip);
-    console.log('limit', limit);
-    console.log('orderBy', orderBy);
+    this.logger.debug(
+      `[${this.context}] Fetching paginated users`,
+      { skip, limit, orderBy },
+      this.context,
+    );
     const [docs, totalDocs] = await Promise.all([
       this.prisma.user.findMany({
         where,

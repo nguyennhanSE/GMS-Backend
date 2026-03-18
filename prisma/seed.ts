@@ -852,6 +852,51 @@ async function main() {
   ]);
 
   // 6) User memberships (avoid duplicates; there is no unique constraint)
+  // 5b) Trainer Availabilities (relational table — replaces legacy JSON fields)
+  const allTrainerIds = [trainerUser.id, ...trainers.map((t) => t.id)];
+  await prisma.trainerAvailability.deleteMany({
+    where: { trainerId: { in: allTrainerIds } },
+  });
+
+  // Helper: create time for @db.Time fields (uses epoch date)
+  const seedTime = (h: number, m: number = 0) => new Date(Date.UTC(1970, 0, 1, h, m, 0, 0));
+
+  await prisma.trainerAvailability.createMany({
+    data: [
+      // John Trainer (trainerUser): Mon/Wed/Fri 09:00-12:00, 14:00-18:00
+      { trainerId: trainerUser.id, dayOfWeek: 1, startTime: seedTime(9), endTime: seedTime(12) },
+      { trainerId: trainerUser.id, dayOfWeek: 1, startTime: seedTime(14), endTime: seedTime(18) },
+      { trainerId: trainerUser.id, dayOfWeek: 3, startTime: seedTime(9), endTime: seedTime(12) },
+      { trainerId: trainerUser.id, dayOfWeek: 3, startTime: seedTime(14), endTime: seedTime(18) },
+      { trainerId: trainerUser.id, dayOfWeek: 5, startTime: seedTime(9), endTime: seedTime(12) },
+      { trainerId: trainerUser.id, dayOfWeek: 5, startTime: seedTime(14), endTime: seedTime(18) },
+      // Sarah Johnson (trainers[0]): Tue/Thu 06:00-14:00, Sat 08:00-16:00
+      { trainerId: trainers[0].id, dayOfWeek: 2, startTime: seedTime(6), endTime: seedTime(14) },
+      { trainerId: trainers[0].id, dayOfWeek: 4, startTime: seedTime(6), endTime: seedTime(14) },
+      { trainerId: trainers[0].id, dayOfWeek: 6, startTime: seedTime(8), endTime: seedTime(16) },
+      // Mike Chen (trainers[1]): Mon/Wed/Fri 06:00-10:00, Sat 10:00-18:00
+      { trainerId: trainers[1].id, dayOfWeek: 1, startTime: seedTime(6), endTime: seedTime(10) },
+      { trainerId: trainers[1].id, dayOfWeek: 3, startTime: seedTime(6), endTime: seedTime(10) },
+      { trainerId: trainers[1].id, dayOfWeek: 5, startTime: seedTime(6), endTime: seedTime(10) },
+      { trainerId: trainers[1].id, dayOfWeek: 6, startTime: seedTime(10), endTime: seedTime(18) },
+      // Emma Williams (trainers[2]): Mon/Tue/Thu 17:00-21:00, Sun 09:00-13:00
+      { trainerId: trainers[2].id, dayOfWeek: 1, startTime: seedTime(17), endTime: seedTime(21) },
+      { trainerId: trainers[2].id, dayOfWeek: 2, startTime: seedTime(17), endTime: seedTime(21) },
+      { trainerId: trainers[2].id, dayOfWeek: 4, startTime: seedTime(17), endTime: seedTime(21) },
+      { trainerId: trainers[2].id, dayOfWeek: 0, startTime: seedTime(9), endTime: seedTime(13) },
+      // David Martinez (trainers[3]): Tue/Thu 09:00-17:00
+      { trainerId: trainers[3].id, dayOfWeek: 2, startTime: seedTime(9), endTime: seedTime(17) },
+      { trainerId: trainers[3].id, dayOfWeek: 4, startTime: seedTime(9), endTime: seedTime(17) },
+      // Lisa Anderson (trainers[4]): Mon/Wed/Fri 12:00-20:00
+      { trainerId: trainers[4].id, dayOfWeek: 1, startTime: seedTime(12), endTime: seedTime(20) },
+      { trainerId: trainers[4].id, dayOfWeek: 3, startTime: seedTime(12), endTime: seedTime(20) },
+      { trainerId: trainers[4].id, dayOfWeek: 5, startTime: seedTime(12), endTime: seedTime(20) },
+    ],
+  });
+
+  console.log(`✅ Created trainer availability records for ${allTrainerIds.length} trainers`);
+
+  // 6) User memberships continued
   await ensureUserMembership({
     prisma,
     userId: memberUser.id,

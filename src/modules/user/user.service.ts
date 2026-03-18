@@ -1,8 +1,15 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { UserEntity } from './entities/user.entity';
 import { CreateUserDto, UpdateUserDto, UserFilterDto } from './dto/user.dto';
 import { UserRepository } from './repositories/user.repository';
-import { IPaginate, PaginateOptions } from '../../libs/models/paginate/pagimate.model';
+import {
+  IPaginate,
+  PaginateOptions,
+} from '../../libs/models/paginate/pagimate.model';
 import { ERoleName } from '../roles/enums/role.enum';
 import * as bcrypt from 'bcrypt';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -31,17 +38,18 @@ export class UserService {
 
   /**
    * Create a new user with role assignment
-   * Default role is USER if not provided
+   * Default role is MEMBER if not provided
    */
   async create(createUserDto: CreateUserDto): Promise<UserEntity> {
     // Check if user already exists
-    const existingUser = await this.userRepository.getUserByEmail(createUserDto.email);
+    const existingUser = await this.userRepository.getUserByEmail(
+      createUserDto.email,
+    );
     if (existingUser) {
       throw new BadRequestException('User with this email already exists');
     }
 
-    // Generate a random password if not provided
-    const password = await bcrypt.hash('password123', 10); // Default password
+    const password = await bcrypt.hash(createUserDto.password, 10);
 
     return this.userRepository.createUser({
       ...createUserDto,
@@ -55,7 +63,7 @@ export class UserService {
   async getUserPaginate(
     paginateRequest: PaginateOptions,
     filter: UserFilterDto,
-    options: { counted?: boolean }
+    options: { counted?: boolean },
   ): Promise<IPaginate<UserEntity>> {
     return this.userRepository.getUserPaginate(filter, {
       ...paginateRequest,
@@ -83,7 +91,9 @@ export class UserService {
 
     // Check if email is being updated and if it's already taken by another user
     if (updateUserDto.email) {
-      const emailUser = await this.userRepository.getUserByEmail(updateUserDto.email);
+      const emailUser = await this.userRepository.getUserByEmail(
+        updateUserDto.email,
+      );
       if (emailUser && emailUser.id !== id) {
         throw new BadRequestException('Email is already taken by another user');
       }
@@ -97,7 +107,10 @@ export class UserService {
 
     // Prepare update data
     const { password, ...otherData } = updateUserDto;
-    const updateData: Partial<UserEntity> & { role?: ERoleName; password?: string } = {
+    const updateData: Partial<UserEntity> & {
+      role?: ERoleName;
+      password?: string;
+    } = {
       ...otherData,
       ...(hashedPassword && { password: hashedPassword }),
     };
@@ -110,7 +123,10 @@ export class UserService {
       updateUserDto.status !== 'active' &&
       existingUser.status !== updateUserDto.status
     ) {
-      this.eventEmitter.emit(USER_EVENTS.BANNED, new UserBannedEvent(id));
+      await this.eventEmitter.emitAsync(
+        USER_EVENTS.BANNED,
+        new UserBannedEvent(id),
+      );
     }
 
     return updatedUser;

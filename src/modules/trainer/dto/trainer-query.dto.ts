@@ -83,32 +83,3 @@ export class GetTrainersQueryDto {
     @trim()
     searchField?: string;
 }
-
-export class UpdateTrainerAvailabilityDto {
-    @ApiPropertyOptional({
-        description: 'Trainer available time slots',
-        example: [
-            { day: 'Monday', startTime: '09:00', endTime: '12:00' },
-            { day: 'Monday', startTime: '14:00', endTime: '17:00' }
-        ],
-        type: 'array',
-        items: {
-            type: 'object'
-        }
-    })
-    @IsOptional()
-    trainerAvailableTime?: Record<string, any>[];
-
-    @ApiPropertyOptional({
-        description: 'Trainer available days',
-        example: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        type: 'array',
-        items: {
-            type: 'string'
-        }
-    })
-    @IsOptional()
-    @IsString({ each: true })
-    trainerAvailableDays?: string[];
-}
-

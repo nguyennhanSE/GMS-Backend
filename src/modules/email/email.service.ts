@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NodemailerService } from '../../libs/integration/nodemailer/nodemailer.service';
 import { SendEmailDto } from './dto/email.dto';
+import { config } from '../../libs/config';
 
 @Injectable()
 export class UserEmailService {
@@ -373,6 +374,101 @@ Best regards,
 Liflow Team
 
 This is an automated message from Liflow System
+    `;
+  }
+
+  async sendSupportFeedbackEmail(userEmail: string, subject: string, message: string): Promise<boolean> {
+    try {
+      this.logger.log(`Sending support feedback email to admin`, { userEmail, subject });
+
+      const adminEmail = config.EMAIL_USER;
+      if (!adminEmail) {
+        this.logger.error('Cannot send support feedback: EMAIL_USER not configured');
+        return false;
+      }
+
+      const emailSubject = `[Support Feedback] ${subject}`;
+      const html = this.getSupportFeedbackEmailTemplate(userEmail, subject, message);
+      const text = this.getSupportFeedbackEmailText(userEmail, subject, message);
+
+      const result = await this.nodemailerService.sendEmail({
+        to: adminEmail,
+        subject: emailSubject,
+        html,
+        text,
+      });
+
+      if (result) {
+        this.logger.log(`Support feedback email sent successfully to admin`);
+      } else {
+        this.logger.error(`Failed to send support feedback email to admin`);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Error sending support feedback email`, error);
+      return false;
+    }
+  }
+
+  private getSupportFeedbackEmailTemplate(userEmail: string, subject: string, message: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Support Feedback</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #FF5722; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background-color: #f9f9f9; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          .message-box { background-color: #fff; padding: 15px; border-left: 4px solid #FF5722; margin: 20px 0; }
+          .user-info { background-color: #e3f2fd; padding: 10px; border-radius: 4px; margin: 15px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>New Support Feedback</h1>
+          </div>
+          <div class="content">
+            <div class="user-info">
+              <strong>From:</strong> ${userEmail}
+            </div>
+
+            <h3>Subject: ${subject}</h3>
+
+            <div class="message-box">
+              <h4>Message:</h4>
+              <p>${message}</p>
+            </div>
+
+            <p>You can reply directly to <strong>${userEmail}</strong> to respond to this feedback.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message from Liflow Support System</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  private getSupportFeedbackEmailText(userEmail: string, subject: string, message: string): string {
+    return `
+New Support Feedback - Liflow
+
+From: ${userEmail}
+Subject: ${subject}
+
+Message:
+${message}
+
+You can reply directly to ${userEmail} to respond to this feedback.
+
+This is an automated message from Liflow Support System
     `;
   }
 }

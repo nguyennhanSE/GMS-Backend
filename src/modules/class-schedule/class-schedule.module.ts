@@ -6,8 +6,10 @@ import { PrismaService } from 'prisma/prisma.service';
 import { ScheduleExceptionController } from './schedule-exception.controller';
 import { ScheduleExceptionService } from './schedule-exception.service';
 import { ScheduleExceptionRepository } from './repositories/schedule-exception.repository';
+import { TrainerModule } from '../trainer/trainer.module';
 
 @Module({
+  imports: [TrainerModule],
   controllers: [ClassScheduleController, ScheduleExceptionController],
   providers: [
     ClassScheduleService,

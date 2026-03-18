@@ -15,11 +15,13 @@ import {
   PaginateOptions,
 } from '../../libs/models/paginate/pagimate.model';
 import { DayOfWeek } from '@prisma/client';
+import { TrainerService } from '../trainer/trainer.service';
 
 @Injectable()
 export class ClassScheduleService {
   constructor(
     private readonly classScheduleRepository: ClassScheduleRepository,
+    private readonly trainerService: TrainerService,
   ) {}
 
   /**
@@ -33,7 +35,21 @@ export class ClassScheduleService {
     const dayOfWeek = (createClassScheduleDto.daysOfWeek?.[0] ??
       createClassScheduleDto.dayOfWeek) as DayOfWeek;
 
-    // Check for trainer schedule conflicts
+    // Layer 1: Check if trainer is within working hours
+    const workingHoursCheck = await this.trainerService.isWithinWorkingHours(
+      createClassScheduleDto.trainerId,
+      dayOfWeek,
+      createClassScheduleDto.startTime,
+      createClassScheduleDto.endTime,
+    );
+
+    if (!workingHoursCheck.withinHours) {
+      throw new BadRequestException(
+        `Cannot create schedule: ${workingHoursCheck.reason}`,
+      );
+    }
+
+    // Layer 2: Check for trainer schedule conflicts
     const hasConflict =
       await this.classScheduleRepository.checkScheduleConflict(
         createClassScheduleDto.trainerId,
@@ -124,6 +140,21 @@ export class ClassScheduleService {
       updateClassScheduleDto.startTime !== undefined ||
       updateClassScheduleDto.endTime !== undefined
     ) {
+      // Layer 1: Check if trainer is within working hours
+      const workingHoursCheck = await this.trainerService.isWithinWorkingHours(
+        trainerId,
+        dayOfWeek as DayOfWeek,
+        startTime instanceof Date ? startTime : new Date(startTime),
+        endTime instanceof Date ? endTime : new Date(endTime),
+      );
+
+      if (!workingHoursCheck.withinHours) {
+        throw new BadRequestException(
+          `Cannot update schedule: ${workingHoursCheck.reason}`,
+        );
+      }
+
+      // Layer 2: Check for trainer schedule conflicts
       const hasConflict =
         await this.classScheduleRepository.checkScheduleConflict(
           trainerId,

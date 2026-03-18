@@ -1,18 +1,14 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { Injectable, BadRequestException, Logger } from "@nestjs/common";
 import { PrismaService } from "prisma/prisma.service";
 import { TrainerEntity } from "../entities/trainer.entity";
 import { toTrainerEntity, toTrainerEntityWithRelations, toPrismaTrainerCreateInput } from "../mapper/trainer.mapper";
 import { CreateTrainerDto } from "../dto/create-trainer.dto";
+import { TrainerFilterDto } from "../dto/trainer-filter.dto";
 import { ERoleName } from "../../roles/enums/role.enum";
-import { JsonValue } from "@prisma/client/runtime/client";
-import { Prisma } from "@prisma/client";
+import { Prisma, TrainerAvailability } from "@prisma/client";
 import { IPaginate, PaginateOptions } from "../../../libs/models/paginate/pagimate.model";
-
-interface TrainerFilterDto {
-    q?: string;
-    email?: string;
-    searchField?: string;
-}
+import { dayOfWeekEnumToInt, parseTimeString } from "../utils/day-of-week.util";
+import { TrainerAvailabilitySlotDto } from "../dto/trainer-availability.dto";
 
 @Injectable()
 export class TrainerRepository {
@@ -57,7 +53,7 @@ export class TrainerRepository {
             return toTrainerEntityWithRelations(trainer);
         }
         catch (error) {
-            console.error('Prisma error in getTrainerByUserId:', error);
+            Logger.error('Prisma error in getTrainerByUserId:', error);
             throw error;
         }
     }
@@ -179,8 +175,6 @@ export class TrainerRepository {
                 dob: updateData.dob ?? undefined,
                 address: updateData.address ?? undefined,
                 status: updateData.status ?? undefined,
-                trainerAvailableTime: updateData.trainerAvailableTime as any,
-                trainerAvailableDays: updateData.trainerAvailableDays as any,
             },
         });
 
@@ -222,24 +216,6 @@ export class TrainerRepository {
         await this.prisma.user.delete({
             where: { id: userId },
         });
-    }
-
-    /**
-     * Get trainer available time
-     */
-    async getTrainerAvailableTime(userId: string): Promise<JsonValue | null> {
-        if (!userId || userId.trim() === '') {
-            return null;
-        }
-
-        const trainer = await this.prisma.user.findUnique({
-            where: { id: userId.trim() },
-            select: {
-                trainerAvailableTime: true,
-            },
-        });
-
-        return trainer?.trainerAvailableTime ?? null;
     }
 
     /**
@@ -372,5 +348,69 @@ export class TrainerRepository {
                 hasPrev,
             };
         }
+    }
+
+    // ============================================
+    // TRAINER AVAILABILITY (relational table)
+    // ============================================
+
+    /**
+     * Get all availability slots for a trainer
+     */
+    async getAvailabilities(trainerId: string): Promise<TrainerAvailability[]> {
+        return this.prisma.trainerAvailability.findMany({
+            where: { trainerId },
+            orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+        });
+    }
+
+    /**
+     * Bulk set availability: deletes all existing slots and creates new ones
+     */
+    async setAvailabilities(
+        trainerId: string,
+        slots: TrainerAvailabilitySlotDto[],
+    ): Promise<TrainerAvailability[]> {
+        await this.prisma.$transaction(async (tx) => {
+            // Delete all existing availability for this trainer
+            await tx.trainerAvailability.deleteMany({
+                where: { trainerId },
+            });
+
+            // Create new slots
+            if (slots.length > 0) {
+                await tx.trainerAvailability.createMany({
+                    data: slots.map((slot) => ({
+                        trainerId,
+                        dayOfWeek: dayOfWeekEnumToInt(slot.dayOfWeek),
+                        startTime: parseTimeString(slot.startTime),
+                        endTime: parseTimeString(slot.endTime),
+                        isAvailable: slot.isAvailable ?? true,
+                    })),
+                });
+            }
+        });
+
+        // Return the newly created slots
+        return this.getAvailabilities(trainerId);
+    }
+
+    /**
+     * Delete a single availability slot
+     */
+    async deleteAvailability(trainerId: string, slotId: string): Promise<void> {
+        const slot = await this.prisma.trainerAvailability.findFirst({
+            where: { id: slotId, trainerId },
+        });
+
+        if (!slot) {
+            throw new BadRequestException(
+                `Availability slot ${slotId} not found for trainer ${trainerId}`,
+            );
+        }
+
+        await this.prisma.trainerAvailability.delete({
+            where: { id: slotId },
+        });
     }
 }

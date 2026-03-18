@@ -1,16 +1,33 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
-import { CreateRoleDto, UpdateRoleDto, RoleQueryDto, AssignRolesToUserDto } from './dto/roles.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  CreateRoleDto,
+  UpdateRoleDto,
+  RoleQueryDto,
+  AssignRolesToUserDto,
+} from './dto/roles.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RolesRepository } from './repositories/roles.repository';
 import { ERoleName } from './enums/role.enum';
 
 const SYSTEM_ROLES = [ERoleName.ADMIN];
 
+function toDisplayName(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+}): string {
+  return [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+}
+
 @Injectable()
 export class RolesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly rolesRepository: RolesRepository
+    private readonly rolesRepository: RolesRepository,
   ) {}
 
   async getUserRoles(userId: string): Promise<string[]> {
@@ -23,32 +40,42 @@ export class RolesService {
 
   async create(createRoleDto: CreateRoleDto): Promise<any> {
     const { name, description } = createRoleDto;
-    
+
     // Convert to uppercase
     const upperName = name.toUpperCase();
-    
+
     // Check if role already exists
     const existing = await this.rolesRepository.findByName(upperName);
     if (existing) {
-      throw new ConflictException(`Role with name '${upperName}' already exists`);
+      throw new ConflictException(
+        `Role with name '${upperName}' already exists`,
+      );
     }
 
     return this.rolesRepository.create({
       name: upperName,
-      description
+      description,
     });
   }
 
   async findAll(query: RoleQueryDto): Promise<any> {
-    const { page = 1, limit = 10, search, sortBy = 'createdAt', sortOrder = 'desc' } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query;
     const skip = (page - 1) * limit;
 
-    const where = search ? {
-      OR: [
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { description: { contains: search, mode: 'insensitive' as const } }
-      ]
-    } : {};
+    const where = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { description: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
 
     const orderBy = { [sortBy]: sortOrder };
 
@@ -56,36 +83,36 @@ export class RolesService {
       skip,
       take: limit,
       where,
-      orderBy
+      orderBy,
     });
 
     return {
-      items: roles.map(role => ({
+      items: roles.map((role) => ({
         id: role.id,
         name: role.name,
         description: role.description,
         userCount: role._count?.userRole || 0,
         createdAt: role.createdAt,
-        updatedAt: role.updatedAt
+        updatedAt: role.updatedAt,
       })),
       pagination: {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 
   async findOne(id: string): Promise<any> {
     const role = await this.rolesRepository.findOne(id);
-    
+
     if (!role) {
       throw new NotFoundException(`Role with ID '${id}' not found`);
     }
 
     const userRoles = (role as any).userRole || [];
-    
+
     return {
       id: role.id,
       name: role.name,
@@ -93,18 +120,18 @@ export class RolesService {
       userCount: userRoles.length,
       users: userRoles.map((ur: any) => ({
         id: ur.user.id,
-        name: ur.user.name,
+        name: toDisplayName(ur.user),
         email: ur.user.email,
-        assignedAt: ur.createdAt
+        assignedAt: ur.createdAt,
       })),
       createdAt: role.createdAt,
-      updatedAt: role.updatedAt
+      updatedAt: role.updatedAt,
     };
   }
 
   async update(id: string, updateRoleDto: UpdateRoleDto): Promise<any> {
     const role = await this.rolesRepository.findOne(id);
-    
+
     if (!role) {
       throw new NotFoundException(`Role with ID '${id}' not found`);
     }
@@ -120,7 +147,9 @@ export class RolesService {
       if (upperName !== role.name) {
         const existing = await this.rolesRepository.findByName(upperName);
         if (existing) {
-          throw new ConflictException(`Role with name '${upperName}' already exists`);
+          throw new ConflictException(
+            `Role with name '${upperName}' already exists`,
+          );
         }
         updateRoleDto.name = upperName;
       }
@@ -131,7 +160,7 @@ export class RolesService {
 
   async remove(id: string, force: boolean = false): Promise<any> {
     const role = await this.rolesRepository.findOne(id);
-    
+
     if (!role) {
       throw new NotFoundException(`Role with ID '${id}' not found`);
     }
@@ -145,7 +174,7 @@ export class RolesService {
     const userCount = (role as any).userRole?.length || 0;
     if (userCount > 0 && !force) {
       throw new BadRequestException(
-        `Cannot delete role '${role.name}' because it has ${userCount} assigned user(s). Use force=true to unassign and delete.`
+        `Cannot delete role '${role.name}' because it has ${userCount} assigned user(s). Use force=true to unassign and delete.`,
       );
     }
 
@@ -153,7 +182,10 @@ export class RolesService {
     return this.rolesRepository.delete(id);
   }
 
-  async assignRoleToUsers(roleId: string, assignDto: AssignRolesToUserDto): Promise<any> {
+  async assignRoleToUsers(
+    roleId: string,
+    assignDto: AssignRolesToUserDto,
+  ): Promise<any> {
     const { userIds } = assignDto;
 
     // Verify role exists
@@ -164,28 +196,31 @@ export class RolesService {
 
     // Verify all users exist
     const users = await this.prisma.user.findMany({
-      where: { id: { in: userIds } }
+      where: { id: { in: userIds } },
     });
 
     if (users.length !== userIds.length) {
-      const foundIds = users.map(u => u.id);
-      const missingIds = userIds.filter(id => !foundIds.includes(id));
+      const foundIds = users.map((u) => u.id);
+      const missingIds = userIds.filter((id) => !foundIds.includes(id));
       throw new NotFoundException(`Users not found: ${missingIds.join(', ')}`);
     }
 
     // Assign role to users
-    const result = await this.rolesRepository.assignRoleToUsers(roleId, userIds);
+    const result = await this.rolesRepository.assignRoleToUsers(
+      roleId,
+      userIds,
+    );
 
     return {
       roleId,
       roleName: role.name,
       assignedUsers: result.count,
       skippedUsers: userIds.length - result.count,
-      details: userIds.map(userId => ({
+      details: userIds.map((userId) => ({
         userId,
         status: 'assigned',
-        assignedAt: new Date()
-      }))
+        assignedAt: new Date(),
+      })),
     };
   }
 
@@ -205,8 +240,8 @@ export class RolesService {
     // Check if user has this role
     const userRole = await this.prisma.userRole.findUnique({
       where: {
-        userId_roleId: { userId, roleId }
-      }
+        userId_roleId: { userId, roleId },
+      },
     });
 
     if (!userRole) {
@@ -216,10 +251,12 @@ export class RolesService {
     // Prevent removing last ADMIN
     if (role.name.toUpperCase() === ERoleName.ADMIN.toString().toUpperCase()) {
       const adminCount = await this.prisma.userRole.count({
-        where: { roleId }
+        where: { roleId },
       });
       if (adminCount <= 1) {
-        throw new BadRequestException('Cannot remove the last ADMIN role from the system');
+        throw new BadRequestException(
+          'Cannot remove the last ADMIN role from the system',
+        );
       }
     }
 
@@ -229,11 +266,16 @@ export class RolesService {
       userId,
       roleId,
       roleName: role.name,
-      revokedAt: new Date()
+      revokedAt: new Date(),
     };
   }
 
-  async getUsersByRole(roleId: string, page: number = 1, limit: number = 20, search?: string): Promise<any> {
+  async getUsersByRole(
+    roleId: string,
+    page: number = 1,
+    limit: number = 20,
+    search?: string,
+  ): Promise<any> {
     // Verify role exists
     const role = await this.rolesRepository.findOne(roleId);
     if (!role) {
@@ -241,27 +283,32 @@ export class RolesService {
     }
 
     const skip = (page - 1) * limit;
-    const { userRoles, total } = await this.rolesRepository.getUsersByRole(roleId, skip, limit, search);
+    const { userRoles, total } = await this.rolesRepository.getUsersByRole(
+      roleId,
+      skip,
+      limit,
+      search,
+    );
 
     return {
       role: {
         id: role.id,
         name: role.name,
-        description: role.description
+        description: role.description,
       },
       users: userRoles.map((ur: any) => ({
         id: ur.user.id,
-        name: ur.user.name,
+        name: toDisplayName(ur.user),
         email: ur.user.email,
-        phoneNumber: ur.user.phoneNumber,
-        assignedAt: ur.createdAt
+        phoneNumber: ur.user.phone,
+        assignedAt: ur.createdAt,
       })),
       pagination: {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 }

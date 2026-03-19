@@ -19,6 +19,7 @@ import { TrainerModule } from './modules/trainer/trainer.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { SupportModule } from './modules/support/support.module';
+import { ReportingModule } from './modules/reporting/reporting.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SupportModule } from './modules/support/support.module';
     MembershipsModule,
     PaymentModule,
     SupportModule,
+    ReportingModule,
   ],
   controllers: [AppController],
   providers: [

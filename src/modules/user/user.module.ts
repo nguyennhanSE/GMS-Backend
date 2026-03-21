@@ -5,8 +5,10 @@ import { UserRepository } from './repositories/user.repository';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { RolesModule } from '../roles/roles.module';
 import { LoggerModule } from '../../libs/logger/logger.module';
-@Module({ 
-  imports: [PrismaModule, RolesModule, LoggerModule],
+import { StorageModule } from '../storage/storage.module';
+
+@Module({
+  imports: [PrismaModule, RolesModule, LoggerModule, StorageModule],
   controllers: [UserController],
   providers: [UserService, UserRepository],
   exports: [UserService],

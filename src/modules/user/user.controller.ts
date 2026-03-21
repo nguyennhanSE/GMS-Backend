@@ -10,6 +10,9 @@ import {
   ParseUUIDPipe,
   Req,
   ForbiddenException,
+  ParseFilePipeBuilder,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto, GetUsersQueryDto, UpdateUserDto } from './dto/user.dto';
@@ -22,12 +25,16 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiBody,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { ResponseModel } from '../../libs/models/response/response.model';
 import { RolesService } from '../roles/roles.service';
 import { AssignRolesToSingleUserDto } from '../roles/dto/roles.dto';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { TokenPayload } from 'src/libs/constants/interface';
+import { CurrentUser } from '../../libs/decorator/current-user.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('User Management')
 @ApiBearerAuth()
@@ -128,6 +135,51 @@ export class UserController {
 
     try {
       const user = await this.userService.findOne(id);
+      const result = toResponse(user);
+      responseModel.setData(result);
+    } catch (error) {
+      throw error;
+    }
+
+    return responseModel;
+  }
+
+  @Patch('avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiOperation({ summary: 'Upload avatar for the current authenticated user' })
+  @ApiResponse({ status: 200, description: 'Avatar updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid file upload request' })
+  async updateAvatar(
+    @CurrentUser('sub') userId: string,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addMaxSizeValidator({
+          maxSize: 5 * 1024 * 1024,
+        })
+        .build({
+          fileIsRequired: true,
+          errorHttpStatusCode: 400,
+        }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const responseModel = new ResponseModel();
+
+    try {
+      const user = await this.userService.updateAvatar(userId, file);
       const result = toResponse(user);
       responseModel.setData(result);
     } catch (error) {

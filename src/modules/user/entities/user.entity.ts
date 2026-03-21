@@ -11,12 +11,12 @@ export class UserEntity {
   dob?: Date | null;
   address?: string | null;
   status?: string | null;
+  avatarUrl?: string | null;
 
   createdAt?: Date | null;
 
   roles?: RoleInfo[];
   memberships?: MembershipInfo[];
-
 }
 
 export class RoleInfo {

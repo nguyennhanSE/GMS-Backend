@@ -25,6 +25,7 @@ model User {
   dob       DateTime? @db.Date
   address   String?  @db.Text
   status    String?  @db.VarChar(50)
+  avatarUrl String?  @map("avatar_url") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 

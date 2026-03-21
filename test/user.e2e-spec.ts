@@ -4,12 +4,17 @@ import * as bcrypt from 'bcrypt';
 import * as supertest from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../src/modules/storage/storage.service';
 
 describe('User Module Integration (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let adminToken: string;
   let trainerToken: string;
+  const storageServiceMock = {
+    uploadUserAvatar: jest.fn(),
+    deleteObject: jest.fn(),
+  };
 
   const ADMIN_EMAIL = 'user-admin@e2e.local';
   const ADMIN_PASSWORD = 'AdminPass@12345';
@@ -26,7 +31,10 @@ describe('User Module Integration (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(StorageService)
+      .useValue(storageServiceMock)
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
@@ -95,6 +103,10 @@ describe('User Module Integration (e2e)', () => {
     if (app) {
       await app.close();
     }
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   async function ensureRole(name: string, description: string) {
@@ -340,6 +352,49 @@ describe('User Module Integration (e2e)', () => {
         .send({ username: MEMBER_EMAIL, password: MEMBER_PASSWORD });
 
       expect(loginResponse.status).toBe(401);
+    });
+  });
+
+  describe('avatar upload', () => {
+    it('allows an authenticated user to upload an avatar for themselves', async () => {
+      const avatarUrl =
+        'https://avatar-bucket.s3.ap-southeast-1.amazonaws.com/users/e2e/avatar/file.png';
+      storageServiceMock.uploadUserAvatar.mockResolvedValue({
+        url: avatarUrl,
+        key: 'users/e2e/avatar/file.png',
+        contentType: 'image/png',
+      });
+
+      const response = await authPatch(trainerToken, '/user/avatar').attach(
+        'file',
+        Buffer.from('fake-image'),
+        {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.avatarUrl).toBe(avatarUrl);
+
+      const persisted = await prisma.user.findUnique({
+        where: { id: trainerUserId },
+      });
+      expect(persisted?.avatarUrl).toBe(avatarUrl);
+    });
+
+    it('rejects invalid avatar mime types', async () => {
+      const response = await authPatch(trainerToken, '/user/avatar').attach(
+        'file',
+        Buffer.from('not-an-image'),
+        {
+          filename: 'avatar.txt',
+          contentType: 'text/plain',
+        },
+      );
+
+      expect(response.status).toBe(400);
+      expect(storageServiceMock.uploadUserAvatar).not.toHaveBeenCalled();
     });
   });
 });

@@ -14,12 +14,23 @@ import { ERoleName } from '../roles/enums/role.enum';
 import * as bcrypt from 'bcrypt';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UserBannedEvent, USER_EVENTS } from 'src/common/events/user.events';
+import { StorageService } from '../storage/storage.service';
+import { AppLogger } from '../../libs/logger';
 
 @Injectable()
 export class UserService {
+  private readonly context = UserService.name;
+  private readonly supportedAvatarMimeTypes = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  ]);
+
   constructor(
     private readonly userRepository: UserRepository,
     private readonly eventEmitter: EventEmitter2,
+    private readonly storageService: StorageService,
+    private readonly logger: AppLogger,
   ) {}
 
   /**
@@ -130,6 +141,44 @@ export class UserService {
     }
 
     return updatedUser;
+  }
+
+  async updateAvatar(
+    userId: string,
+    file: Express.Multer.File,
+  ): Promise<UserEntity> {
+    await this.findOne(userId);
+
+    if (!this.supportedAvatarMimeTypes.has(file.mimetype)) {
+      throw new BadRequestException('Unsupported avatar file type');
+    }
+
+    const upload = await this.storageService.uploadUserAvatar({ userId, file });
+
+    try {
+      return await this.userRepository.updateAvatarUrl(userId, upload.url);
+    } catch (error) {
+      try {
+        await this.storageService.deleteObject(upload.key);
+      } catch (cleanupError) {
+        this.logger.error(
+          `[${this.context}] Failed to cleanup uploaded avatar after persistence failure`,
+          {
+            userId,
+            key: upload.key,
+            persistenceError:
+              error instanceof Error ? error.message : String(error),
+            cleanupError:
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : String(cleanupError),
+          },
+          this.context,
+        );
+      }
+
+      throw error;
+    }
   }
 
   /**

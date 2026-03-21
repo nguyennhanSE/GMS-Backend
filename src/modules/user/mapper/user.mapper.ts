@@ -26,6 +26,7 @@ export function toUserEntity(user: UserModel): UserEntity {
     dob: user.dob,
     address: user.address,
     status: user.status,
+    avatarUrl: user.avatarUrl,
     createdAt: user.createdAt,
     roles: [],
     memberships: [],
@@ -42,8 +43,12 @@ export function toUserEntityWithRelations(user: UserWithRelations): UserEntity {
   // Extract roles
   if (user.userRole) {
     user.userRole.forEach((userRole) => {
-      const role = userRole.role as unknown as { id: string; name: string; description: string | null };
-      
+      const role = userRole.role as unknown as {
+        id: string;
+        name: string;
+        description: string | null;
+      };
+
       // Add role if not already added
       if (!roleMap.has(role.id)) {
         roleMap.set(role.id, {
@@ -60,7 +65,7 @@ export function toUserEntityWithRelations(user: UserWithRelations): UserEntity {
   if (user.userMembership) {
     user.userMembership.forEach((userMembership) => {
       const membership = userMembership.membership;
-      
+
       // Add membership with basic info
       memberships.push({
         id: membership.id,
@@ -81,6 +86,7 @@ export function toUserEntityWithRelations(user: UserWithRelations): UserEntity {
     dob: user.dob,
     address: user.address,
     status: user.status,
+    avatarUrl: user.avatarUrl,
     createdAt: user.createdAt,
     roles: Array.from(roleMap.values()),
     memberships: memberships,
@@ -101,6 +107,7 @@ export function toPrismaUserCreateInput(dto: CreateUserDto & { password: string 
     dob: dto.dob ?? null,
     address: dto.address ?? null,
     status: dto.status ?? null,
+    avatarUrl: null,
   };
 }
 

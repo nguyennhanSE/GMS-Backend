@@ -48,6 +48,12 @@ export const config = {
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ?? '',
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ?? '',
 
+  // AWS S3 Configuration
+  AWS_REGION: process.env.AWS_REGION ?? '',
+  AWS_S3_BUCKET: process.env.AWS_S3_BUCKET ?? '',
+  AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID ?? '',
+  AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+
   // Stripe Configuration
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? '',
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? '',

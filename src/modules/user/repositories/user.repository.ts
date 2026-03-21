@@ -231,6 +231,40 @@ export class UserRepository {
     return toUserEntityWithRelations(userWithRelations);
   }
 
+  async updateAvatarUrl(
+    userId: string,
+    avatarUrl: string | null,
+  ): Promise<UserEntity> {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      throw new BadRequestException(`User with id ${userId} not found`);
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        avatarUrl,
+      },
+      include: {
+        userRole: {
+          include: {
+            role: true,
+          },
+        },
+        userMembership: {
+          include: {
+            membership: true,
+          },
+        },
+      },
+    });
+
+    return toUserEntityWithRelations(updatedUser);
+  }
+
   /**
    * Delete user
    */

@@ -1,12 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MembershipPaymentConsumer } from './membership-payment.consumer';
 import { MembershipsService } from './memberships.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import type { PaymentEventPayload } from '../payment/dto/webhook-event.dto';
+import { NOTIFICATION_EVENTS } from '../../common/events/notification.events';
 
 describe('MembershipPaymentConsumer', () => {
   let consumer: MembershipPaymentConsumer;
   let membershipsService: jest.Mocked<any>;
+  let prisma: jest.Mocked<any>;
+  let eventEmitter: jest.Mocked<any>;
   let mockChannel: { ack: jest.Mock; nack: jest.Mock };
   let mockMessage: Record<string, unknown>;
 
@@ -35,6 +40,14 @@ describe('MembershipPaymentConsumer', () => {
       activateByPayment: jest.fn(),
       deactivateByPayment: jest.fn(),
     };
+    prisma = {
+      user: {
+        findUnique: jest.fn(),
+      },
+    };
+    eventEmitter = {
+      emitAsync: jest.fn().mockResolvedValue([]),
+    };
 
     mockChannel = { ack: jest.fn(), nack: jest.fn() };
     mockMessage = { fields: {}, properties: {}, content: Buffer.from('') };
@@ -43,6 +56,8 @@ describe('MembershipPaymentConsumer', () => {
       providers: [
         MembershipPaymentConsumer,
         { provide: MembershipsService, useValue: membershipsService },
+        { provide: PrismaService, useValue: prisma },
+        { provide: EventEmitter2, useValue: eventEmitter },
       ],
     }).compile();
 
@@ -108,12 +123,26 @@ describe('MembershipPaymentConsumer', () => {
   describe('handlePaymentFailed', () => {
     it('should deactivate membership and ack on success', async () => {
       const payload = createPayload({ status: 'FAILED' as any });
-      membershipsService.deactivateByPayment.mockResolvedValue(undefined);
+      membershipsService.deactivateByPayment.mockResolvedValue(true);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'member@test.local',
+        firstName: 'Test',
+        lastName: 'Member',
+      });
 
       await consumer.handlePaymentFailed(payload, createContext());
 
       expect(membershipsService.deactivateByPayment).toHaveBeenCalledWith(
         'pay-1',
+      );
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+        NOTIFICATION_EVENTS.PAYMENT_FAILED,
+        expect.objectContaining({
+          userId: 'user-1',
+          userEmail: 'member@test.local',
+          referenceId: 'membership-1',
+        }),
       );
       expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
     });
@@ -124,6 +153,16 @@ describe('MembershipPaymentConsumer', () => {
       await consumer.handlePaymentFailed(payload, createContext());
 
       expect(membershipsService.deactivateByPayment).not.toHaveBeenCalled();
+      expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
+    });
+
+    it('should not emit a local notification event when membership state did not change', async () => {
+      const payload = createPayload({ status: 'FAILED' as any });
+      membershipsService.deactivateByPayment.mockResolvedValue(false);
+
+      await consumer.handlePaymentFailed(payload, createContext());
+
+      expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
       expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
     });
   });

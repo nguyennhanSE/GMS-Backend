@@ -3,11 +3,18 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
-import { ExceptionType } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ExceptionType, NotificationType } from '@prisma/client';
 import { ScheduleExceptionRepository } from './repositories/schedule-exception.repository';
 import { ClassScheduleRepository } from './repositories/class-schedule.repository';
 import { ScheduleExceptionEntity } from './entities/schedule-exception.entity';
+import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  NOTIFICATION_EVENTS,
+  NotificationEventPayload,
+} from '../../common/events/notification.events';
 import {
   CreateScheduleExceptionDto,
   UpdateScheduleExceptionDto,
@@ -16,9 +23,13 @@ import {
 
 @Injectable()
 export class ScheduleExceptionService {
+  private readonly logger = new Logger(ScheduleExceptionService.name);
+
   constructor(
     private readonly exceptionRepository: ScheduleExceptionRepository,
     private readonly scheduleRepository: ClassScheduleRepository,
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -68,7 +79,7 @@ export class ScheduleExceptionService {
       newEndTime = this.parseTimeString(dto.newEndTime);
     }
 
-    return this.exceptionRepository.create({
+    const createdException = await this.exceptionRepository.create({
       scheduleId,
       exceptionDate,
       type: dto.type as ExceptionType,
@@ -76,6 +87,18 @@ export class ScheduleExceptionService {
       newStartTime,
       newEndTime,
     });
+
+    if (dto.type === ExceptionTypeDto.CANCELLED) {
+      await this.emitClassCancelledNotifications(
+        scheduleId,
+        exceptionDate,
+        dto.reason,
+        (schedule as any).gymClass?.className ?? 'Class',
+        createdException.id,
+      );
+    }
+
+    return createdException;
   }
 
   /**
@@ -193,5 +216,77 @@ export class ScheduleExceptionService {
     // Create a date with just the time component (1970-01-01)
     const date = new Date(1970, 0, 1, hours, minutes, seconds);
     return date;
+  }
+
+  private async emitClassCancelledNotifications(
+    scheduleId: string,
+    exceptionDate: Date,
+    reason: string | undefined,
+    className: string,
+    exceptionId: string,
+  ): Promise<void> {
+    const bookings = await this.prisma.classBooking.findMany({
+      where: {
+        classScheduleId: scheduleId,
+        status: {
+          not: 'cancelled',
+        },
+        bookingStartDate: {
+          lte: exceptionDate,
+        },
+        bookingEndDate: {
+          gte: exceptionDate,
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    const emits = bookings
+      .filter((booking) => booking.user)
+      .map((booking) => {
+        const payload: NotificationEventPayload = {
+          userId: booking.user!.id,
+          userEmail: booking.user!.email,
+          userName:
+            `${booking.user!.firstName} ${booking.user!.lastName}`.trim(),
+          type: NotificationType.BOOKING,
+          title: 'Class cancelled',
+          message: reason
+            ? `${className} on ${exceptionDate.toISOString().split('T')[0]} was cancelled. Reason: ${reason}.`
+            : `${className} on ${exceptionDate.toISOString().split('T')[0]} was cancelled.`,
+          referenceId: booking.id,
+          metadata: {
+            eventKey: NOTIFICATION_EVENTS.CLASS_CANCELLED,
+            scheduleId,
+            bookingId: booking.id,
+            exceptionId,
+            exceptionDate: exceptionDate.toISOString(),
+            className,
+            reason,
+          },
+        };
+
+        return this.eventEmitter.emitAsync(
+          NOTIFICATION_EVENTS.CLASS_CANCELLED,
+          payload,
+        );
+      });
+
+    const results = await Promise.allSettled(emits);
+    const failedCount = results.filter(
+      (result) => result.status === 'rejected',
+    ).length;
+
+    if (failedCount > 0) {
+      this.logger.error(
+        `Failed to emit ${failedCount} class cancellation notifications`,
+        {
+          scheduleId,
+          exceptionId,
+        },
+      );
+    }
   }
 }

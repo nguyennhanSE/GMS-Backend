@@ -219,7 +219,7 @@ export class MembershipsService {
    * Deactivate membership after payment failure or refund.
    * Called by the RabbitMQ consumer — system-level, no user guards.
    */
-  async deactivateByPayment(paymentId: string) {
+  async deactivateByPayment(paymentId: string): Promise<boolean> {
     const userMembership = await this.prisma.userMembership.findFirst({
       where: { paymentId },
     });
@@ -228,14 +228,14 @@ export class MembershipsService {
       this.logger.warn(
         `No membership found for payment ${paymentId} — skipping deactivation`,
       );
-      return;
+      return false;
     }
 
     if (userMembership.status === 'expired') {
       this.logger.log(
         `Membership for payment ${paymentId} already expired — skipping`,
       );
-      return;
+      return false;
     }
 
     await this.prisma.userMembership.update({
@@ -249,5 +249,6 @@ export class MembershipsService {
     this.logger.log(
       `Deactivated membership ${userMembership.membershipName} for payment ${paymentId}`,
     );
+    return true;
   }
 }

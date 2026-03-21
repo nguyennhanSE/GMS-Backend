@@ -20,6 +20,7 @@ import { MembershipsModule } from './modules/memberships/memberships.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { SupportModule } from './modules/support/support.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
+import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ReportingModule } from './modules/reporting/reporting.module';
     PaymentModule,
     SupportModule,
     ReportingModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [

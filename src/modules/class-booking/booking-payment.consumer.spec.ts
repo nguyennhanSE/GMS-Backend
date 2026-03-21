@@ -1,12 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BookingPaymentConsumer } from './booking-payment.consumer';
 import { ClassBookingService } from './class-booking.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import type { PaymentEventPayload } from '../payment/dto/webhook-event.dto';
+import { NOTIFICATION_EVENTS } from '../../common/events/notification.events';
 
 describe('BookingPaymentConsumer', () => {
   let consumer: BookingPaymentConsumer;
   let classBookingService: jest.Mocked<any>;
+  let prisma: jest.Mocked<any>;
+  let eventEmitter: jest.Mocked<any>;
   let mockChannel: { ack: jest.Mock; nack: jest.Mock };
   let mockMessage: Record<string, unknown>;
 
@@ -35,6 +40,14 @@ describe('BookingPaymentConsumer', () => {
       confirmByPayment: jest.fn(),
       cancelByPayment: jest.fn(),
     };
+    prisma = {
+      user: {
+        findUnique: jest.fn(),
+      },
+    };
+    eventEmitter = {
+      emitAsync: jest.fn().mockResolvedValue([]),
+    };
 
     mockChannel = { ack: jest.fn(), nack: jest.fn() };
     mockMessage = { fields: {}, properties: {}, content: Buffer.from('') };
@@ -43,6 +56,8 @@ describe('BookingPaymentConsumer', () => {
       providers: [
         BookingPaymentConsumer,
         { provide: ClassBookingService, useValue: classBookingService },
+        { provide: PrismaService, useValue: prisma },
+        { provide: EventEmitter2, useValue: eventEmitter },
       ],
     }).compile();
 
@@ -104,7 +119,13 @@ describe('BookingPaymentConsumer', () => {
   describe('handlePaymentFailed', () => {
     it('should cancel booking and ack on success', async () => {
       const payload = createPayload({ status: 'FAILED' as any });
-      classBookingService.cancelByPayment.mockResolvedValue({});
+      classBookingService.cancelByPayment.mockResolvedValue(true);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'member@test.local',
+        firstName: 'Test',
+        lastName: 'Member',
+      });
 
       await consumer.handlePaymentFailed(payload, createContext());
 
@@ -112,6 +133,24 @@ describe('BookingPaymentConsumer', () => {
         'booking-1',
         'PAYMENT_FAILED',
       );
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+        NOTIFICATION_EVENTS.PAYMENT_FAILED,
+        expect.objectContaining({
+          userId: 'user-1',
+          userEmail: 'member@test.local',
+          referenceId: 'booking-1',
+        }),
+      );
+      expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
+    });
+
+    it('should not emit a local notification event when booking state did not change', async () => {
+      const payload = createPayload({ status: 'FAILED' as any });
+      classBookingService.cancelByPayment.mockResolvedValue(false);
+
+      await consumer.handlePaymentFailed(payload, createContext());
+
+      expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
       expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
     });
   });

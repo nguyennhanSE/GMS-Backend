@@ -3,9 +3,16 @@ import { NodemailerService } from '../../libs/integration/nodemailer/nodemailer.
 import { SendEmailDto } from './dto/email.dto';
 import { config } from '../../libs/config';
 
+export interface NotificationEmailRecipient {
+  id: string;
+  name: string;
+  email: string;
+}
+
 @Injectable()
 export class UserEmailService {
   private readonly logger = new Logger(UserEmailService.name);
+  private static readonly NOTIFICATION_EMAIL_TIMEOUT_MS = 5000;
 
   constructor(private readonly nodemailerService: NodemailerService) { }
 
@@ -93,14 +100,18 @@ export class UserEmailService {
     }
   }
 
-  async sendNotificationEmail(user: SendEmailDto, subject: string, message: string): Promise<boolean> {
+  async sendNotificationEmail(
+    user: NotificationEmailRecipient,
+    subject: string,
+    message: string,
+  ): Promise<boolean> {
     try {
       this.logger.log(`Sending notification email to ${user.email}`, { userId: user.id, subject });
 
       const html = this.getNotificationEmailTemplate(user, subject, message);
       const text = this.getNotificationEmailText(user, subject, message);
 
-      const result = await this.nodemailerService.sendEmail({
+      const result = await this.sendEmailWithTimeout({
         to: user.email,
         subject,
         html,
@@ -328,7 +339,11 @@ This is an automated message from Liflow System
     `;
   }
 
-  private getNotificationEmailTemplate(user: SendEmailDto, subject: string, message: string): string {
+  private getNotificationEmailTemplate(
+    user: NotificationEmailRecipient,
+    subject: string,
+    message: string,
+  ): string {
     return `
       <!DOCTYPE html>
       <html>
@@ -362,7 +377,11 @@ This is an automated message from Liflow System
     `;
   }
 
-  private getNotificationEmailText(user: SendEmailDto, subject: string, message: string): string {
+  private getNotificationEmailText(
+    user: NotificationEmailRecipient,
+    subject: string,
+    message: string,
+  ): string {
     return `
 ${subject} - Liflow
 
@@ -470,5 +489,26 @@ You can reply directly to ${userEmail} to respond to this feedback.
 
 This is an automated message from Liflow Support System
     `;
+  }
+
+  private async sendEmailWithTimeout(data: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<boolean> {
+    const timeoutPromise = new Promise<boolean>((resolve) => {
+      setTimeout(() => {
+        this.logger.error(`Notification email timed out for ${data.to}`, {
+          subject: data.subject,
+        });
+        resolve(false);
+      }, UserEmailService.NOTIFICATION_EMAIL_TIMEOUT_MS);
+    });
+
+    return Promise.race([
+      this.nodemailerService.sendEmail(data),
+      timeoutPromise,
+    ]);
   }
 }

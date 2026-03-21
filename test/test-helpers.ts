@@ -293,6 +293,11 @@ export async function cleanupTestData(prisma: PrismaService): Promise<void> {
     where: { user: { email: { in: testEmails } } },
   });
 
+  // Delete payments
+  await prisma.payment.deleteMany({
+    where: { user: { email: { in: testEmails } } },
+  });
+
   // Delete user roles
   await prisma.userRole.deleteMany({
     where: { user: { email: { in: testEmails } } },

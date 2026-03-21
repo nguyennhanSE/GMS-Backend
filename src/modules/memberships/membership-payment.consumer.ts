@@ -1,13 +1,24 @@
 import { Controller, Logger, NotFoundException } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificationType } from '@prisma/client';
 import { MembershipsService } from './memberships.service';
 import type { PaymentEventPayload } from '../payment/dto/webhook-event.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  NOTIFICATION_EVENTS,
+  NotificationEventPayload,
+} from '../../common/events/notification.events';
 
 @Controller()
 export class MembershipPaymentConsumer {
   private readonly logger = new Logger(MembershipPaymentConsumer.name);
 
-  constructor(private readonly membershipsService: MembershipsService) {}
+  constructor(
+    private readonly membershipsService: MembershipsService,
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   @EventPattern('payment.success')
   async handlePaymentSuccess(
@@ -54,7 +65,12 @@ export class MembershipPaymentConsumer {
     }
 
     try {
-      await this.membershipsService.deactivateByPayment(payload.paymentId);
+      const changed = await this.membershipsService.deactivateByPayment(
+        payload.paymentId,
+      );
+      if (changed) {
+        await this.emitPaymentFailedNotification(payload);
+      }
       channel.ack(message);
     } catch (error) {
       this.handleError(error, payload, channel, message, 'payment.failed');
@@ -110,5 +126,48 @@ export class MembershipPaymentConsumer {
       );
       channel.nack(message, false, false);
     }
+  }
+
+  private async emitPaymentFailedNotification(
+    payload: PaymentEventPayload,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    if (!user) {
+      this.logger.warn(
+        `[payment.failed] User ${payload.userId} not found for notification`,
+      );
+      return;
+    }
+
+    const eventPayload: NotificationEventPayload = {
+      userId: user.id,
+      userEmail: user.email,
+      userName: `${user.firstName} ${user.lastName}`.trim(),
+      type: NotificationType.PAYMENT,
+      title: 'Payment failed',
+      message:
+        'Your membership payment failed. Please update your card details and try again.',
+      referenceId: payload.targetId,
+      metadata: {
+        eventKey: NOTIFICATION_EVENTS.PAYMENT_FAILED,
+        paymentId: payload.paymentId,
+        targetType: payload.targetType,
+        targetId: payload.targetId,
+      },
+    };
+
+    await this.eventEmitter.emitAsync(
+      NOTIFICATION_EVENTS.PAYMENT_FAILED,
+      eventPayload,
+    );
   }
 }

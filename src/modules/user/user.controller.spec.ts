@@ -40,7 +40,8 @@ describe('UserController', () => {
       firstName: 'Test',
       lastName: 'User',
       email: 'user@test.local',
-      avatarUrl: 'https://bucket.s3.region.amazonaws.com/users/user-1/avatar/file.jpg',
+      avatarUrl:
+        'https://res.cloudinary.com/demo/image/upload/v1/users/user-1/avatar/avatar-1.jpg',
       roles: [],
       memberships: [],
     };

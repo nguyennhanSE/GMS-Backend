@@ -1,10 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UserService } from './user.service';
-import { UserRepository } from './repositories/user.repository';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { StorageService } from '../storage/storage.service';
 import { AppLogger } from '../../libs/logger';
+import { StorageService } from '../storage/storage.service';
 import { UserEntity } from './entities/user.entity';
+import { UserRepository } from './repositories/user.repository';
+import { UserService } from './user.service';
 
 describe('UserService', () => {
   let service: UserService;
@@ -57,6 +57,8 @@ describe('UserService', () => {
   });
 
   it('uploads an avatar and persists the returned url', async () => {
+    const avatarUrl =
+      'https://res.cloudinary.com/demo-cloud/image/upload/v1234/users/user-1/avatar/1234-uuid.jpg';
     const existingUser: UserEntity = {
       id: 'user-1',
       firstName: 'Test',
@@ -67,7 +69,7 @@ describe('UserService', () => {
     };
     const updatedUser: UserEntity = {
       ...existingUser,
-      avatarUrl: 'https://bucket.s3.region.amazonaws.com/users/user-1/avatar/file.jpg',
+      avatarUrl,
     };
     const file = {
       mimetype: 'image/jpeg',
@@ -76,8 +78,8 @@ describe('UserService', () => {
 
     userRepository.getUserByAccount.mockResolvedValue(existingUser);
     storageService.uploadUserAvatar.mockResolvedValue({
-      url: updatedUser.avatarUrl,
-      key: 'users/user-1/avatar/file.jpg',
+      url: avatarUrl,
+      key: 'users/user-1/avatar/1234-uuid',
       contentType: 'image/jpeg',
     });
     userRepository.updateAvatarUrl.mockResolvedValue(updatedUser);
@@ -92,7 +94,7 @@ describe('UserService', () => {
     ]);
     expect(userRepository.updateAvatarUrl.mock.calls[0]).toEqual([
       'user-1',
-      updatedUser.avatarUrl,
+      avatarUrl,
     ]);
     expect(storageService.deleteObject.mock.calls).toHaveLength(0);
     expect(result).toBe(updatedUser);
@@ -113,8 +115,8 @@ describe('UserService', () => {
       memberships: [],
     });
     storageService.uploadUserAvatar.mockResolvedValue({
-      url: 'https://bucket.s3.region.amazonaws.com/users/user-1/avatar/file.png',
-      key: 'users/user-1/avatar/file.png',
+      url: 'https://res.cloudinary.com/demo-cloud/image/upload/v1234/users/user-1/avatar/1234-uuid.png',
+      key: 'users/user-1/avatar/1234-uuid',
       contentType: 'image/png',
     });
     userRepository.updateAvatarUrl.mockRejectedValue(new Error('db failed'));
@@ -124,8 +126,34 @@ describe('UserService', () => {
     );
 
     expect(storageService.deleteObject.mock.calls[0]).toEqual([
-      'users/user-1/avatar/file.png',
+      'users/user-1/avatar/1234-uuid',
     ]);
+  });
+
+  it('does not persist avatar data when upload fails', async () => {
+    const file = {
+      mimetype: 'image/png',
+      buffer: Buffer.from('avatar'),
+    } as Express.Multer.File;
+
+    userRepository.getUserByAccount.mockResolvedValue({
+      id: 'user-1',
+      firstName: 'Test',
+      lastName: 'User',
+      email: 'user@test.local',
+      roles: [],
+      memberships: [],
+    });
+    storageService.uploadUserAvatar.mockRejectedValue(
+      new Error('upload failed'),
+    );
+
+    await expect(service.updateAvatar('user-1', file)).rejects.toThrow(
+      'upload failed',
+    );
+
+    expect(userRepository.updateAvatarUrl.mock.calls).toHaveLength(0);
+    expect(storageService.deleteObject.mock.calls).toHaveLength(0);
   });
 
   it('logs the orphaned key when compensating cleanup fails', async () => {
@@ -143,8 +171,8 @@ describe('UserService', () => {
       memberships: [],
     });
     storageService.uploadUserAvatar.mockResolvedValue({
-      url: 'https://bucket.s3.region.amazonaws.com/users/user-1/avatar/file.webp',
-      key: 'users/user-1/avatar/file.webp',
+      url: 'https://res.cloudinary.com/demo-cloud/image/upload/v1234/users/user-1/avatar/1234-uuid.webp',
+      key: 'users/user-1/avatar/1234-uuid',
       contentType: 'image/webp',
     });
     userRepository.updateAvatarUrl.mockRejectedValue(new Error('db failed'));

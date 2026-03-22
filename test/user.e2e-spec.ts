@@ -99,6 +99,7 @@ describe('User Module Integration (e2e)', () => {
   afterAll(async () => {
     if (prisma) {
       await cleanupTestUsers();
+      await prisma.$disconnect();
     }
     if (app) {
       await app.close();
@@ -358,10 +359,10 @@ describe('User Module Integration (e2e)', () => {
   describe('avatar upload', () => {
     it('allows an authenticated user to upload an avatar for themselves', async () => {
       const avatarUrl =
-        'https://avatar-bucket.s3.ap-southeast-1.amazonaws.com/users/e2e/avatar/file.png';
+        'https://res.cloudinary.com/demo/image/upload/v1/users/e2e/avatar/avatar-1.png';
       storageServiceMock.uploadUserAvatar.mockResolvedValue({
         url: avatarUrl,
-        key: 'users/e2e/avatar/file.png',
+        key: 'users/e2e/avatar/avatar-1',
         contentType: 'image/png',
       });
 
@@ -384,6 +385,12 @@ describe('User Module Integration (e2e)', () => {
     });
 
     it('rejects invalid avatar mime types', async () => {
+      storageServiceMock.uploadUserAvatar.mockResolvedValue({
+        url: 'https://res.cloudinary.com/demo/image/upload/v1/users/e2e/avatar/avatar-2.png',
+        key: 'users/e2e/avatar/avatar-2',
+        contentType: 'image/png',
+      });
+
       const response = await authPatch(trainerToken, '/user/avatar').attach(
         'file',
         Buffer.from('not-an-image'),
@@ -392,6 +399,13 @@ describe('User Module Integration (e2e)', () => {
           contentType: 'text/plain',
         },
       );
+
+      expect(response.status).toBe(400);
+      expect(storageServiceMock.uploadUserAvatar).not.toHaveBeenCalled();
+    });
+
+    it('rejects requests without a file', async () => {
+      const response = await authPatch(trainerToken, '/user/avatar');
 
       expect(response.status).toBe(400);
       expect(storageServiceMock.uploadUserAvatar).not.toHaveBeenCalled();

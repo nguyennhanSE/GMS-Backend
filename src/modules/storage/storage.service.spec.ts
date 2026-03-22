@@ -1,36 +1,38 @@
-import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { StorageService } from './storage.service';
-import { AppLogger } from '../../libs/logger';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { v2 as cloudinary } from 'cloudinary';
 import { config } from '../../libs/config';
+import { AppLogger } from '../../libs/logger';
+import { StorageService } from './storage.service';
 
-jest.mock('@aws-sdk/client-s3', () => {
-  const send = jest.fn();
-
-  return {
-    S3Client: jest.fn().mockImplementation(() => ({ send })),
-    PutObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
-    DeleteObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
-  };
-});
+jest.mock('cloudinary', () => ({
+  v2: {
+    config: jest.fn(),
+    uploader: {
+      upload_stream: jest.fn(),
+      destroy: jest.fn(),
+    },
+  },
+}));
 
 describe('StorageService', () => {
   const originalConfig = {
-    AWS_REGION: config.AWS_REGION,
-    AWS_S3_BUCKET: config.AWS_S3_BUCKET,
-    AWS_ACCESS_KEY_ID: config.AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY: config.AWS_SECRET_ACCESS_KEY,
+    CLOUDINARY_CLOUD_NAME: config.CLOUDINARY_CLOUD_NAME,
+    CLOUDINARY_API_KEY: config.CLOUDINARY_API_KEY,
+    CLOUDINARY_API_SECRET: config.CLOUDINARY_API_SECRET,
   };
 
   let service: StorageService;
   let logger: jest.Mocked<AppLogger>;
-  let sendMock: jest.Mock;
+  let uploadStreamMock: jest.Mock;
+  let destroyMock: jest.Mock;
 
   beforeEach(() => {
-    config.AWS_REGION = 'ap-southeast-1';
-    config.AWS_S3_BUCKET = 'avatar-bucket';
-    config.AWS_ACCESS_KEY_ID = 'key';
-    config.AWS_SECRET_ACCESS_KEY = 'secret';
+    config.CLOUDINARY_CLOUD_NAME = 'demo-cloud';
+    config.CLOUDINARY_API_KEY = 'api-key';
+    config.CLOUDINARY_API_SECRET = 'api-secret';
 
     logger = {
       error: jest.fn(),
@@ -40,41 +42,81 @@ describe('StorageService', () => {
     } as unknown as jest.Mocked<AppLogger>;
 
     service = new StorageService(logger);
-    sendMock = (S3Client as unknown as jest.Mock).mock.results.at(-1)?.value
-      .send as jest.Mock;
-    sendMock.mockReset();
+    uploadStreamMock = cloudinary.uploader.upload_stream as jest.Mock;
+    destroyMock = cloudinary.uploader.destroy as jest.Mock;
+
+    uploadStreamMock.mockReset();
+    destroyMock.mockReset();
+    (cloudinary.config as jest.Mock).mockReset();
   });
 
   afterAll(() => {
-    config.AWS_REGION = originalConfig.AWS_REGION;
-    config.AWS_S3_BUCKET = originalConfig.AWS_S3_BUCKET;
-    config.AWS_ACCESS_KEY_ID = originalConfig.AWS_ACCESS_KEY_ID;
-    config.AWS_SECRET_ACCESS_KEY = originalConfig.AWS_SECRET_ACCESS_KEY;
+    config.CLOUDINARY_CLOUD_NAME = originalConfig.CLOUDINARY_CLOUD_NAME;
+    config.CLOUDINARY_API_KEY = originalConfig.CLOUDINARY_API_KEY;
+    config.CLOUDINARY_API_SECRET = originalConfig.CLOUDINARY_API_SECRET;
   });
 
-  it('uploads avatars using file.buffer and a deterministic public url', async () => {
-    sendMock.mockResolvedValue({});
+  it('uploads avatars from file.buffer and returns secure_url plus public_id', async () => {
     const file = {
       mimetype: 'image/png',
       buffer: Buffer.from('avatar'),
     } as Express.Multer.File;
+
+    uploadStreamMock.mockImplementation((options, callback) => ({
+      end: jest.fn((buffer: Buffer) => {
+        expect(buffer).toBe(file.buffer);
+        callback(undefined, {
+          public_id: 'users/user-1/avatar/1234-uuid',
+          secure_url:
+            'https://res.cloudinary.com/demo-cloud/image/upload/v1234/users/user-1/avatar/1234-uuid.png',
+        });
+      }),
+    }));
 
     const result = await service.uploadUserAvatar({
       userId: 'user-1',
       file,
     });
 
-    expect(PutObjectCommand).toHaveBeenCalledWith(
+    expect(cloudinary.config).toHaveBeenCalledWith({
+      cloud_name: 'demo-cloud',
+      api_key: 'api-key',
+      api_secret: 'api-secret',
+    });
+    expect(uploadStreamMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        Bucket: 'avatar-bucket',
-        Body: file.buffer,
-        ContentType: 'image/png',
+        resource_type: 'image',
+        folder: 'users/user-1/avatar',
+        overwrite: false,
+        format: 'png',
       }),
+      expect.any(Function),
     );
-    expect(result.key).toMatch(/^users\/user-1\/avatar\/.+\.png$/);
-    expect(result.url).toBe(
-      `https://avatar-bucket.s3.ap-southeast-1.amazonaws.com/${result.key}`,
-    );
+    expect(result).toEqual({
+      url: 'https://res.cloudinary.com/demo-cloud/image/upload/v1234/users/user-1/avatar/1234-uuid.png',
+      key: 'users/user-1/avatar/1234-uuid',
+      contentType: 'image/png',
+    });
+  });
+
+  it('rejects when the Cloudinary upload callback returns an error', async () => {
+    const file = {
+      mimetype: 'image/jpeg',
+      buffer: Buffer.from('avatar'),
+    } as Express.Multer.File;
+
+    uploadStreamMock.mockImplementation((_options, callback) => ({
+      end: jest.fn(() => {
+        callback(new Error('upload failed'));
+      }),
+    }));
+
+    await expect(
+      service.uploadUserAvatar({
+        userId: 'user-1',
+        file,
+      }),
+    ).rejects.toThrow('upload failed');
   });
 
   it('rejects unsupported mime types', async () => {
@@ -91,19 +133,31 @@ describe('StorageService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('deletes uploaded objects by key', async () => {
-    sendMock.mockResolvedValue({});
+  it('requires an in-memory file buffer', async () => {
+    const file = {
+      mimetype: 'image/webp',
+    } as Express.Multer.File;
 
-    await service.deleteObject('users/user-1/avatar/file.jpg');
+    await expect(
+      service.uploadUserAvatar({
+        userId: 'user-1',
+        file,
+      }),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
 
-    expect(DeleteObjectCommand).toHaveBeenCalledWith({
-      Bucket: 'avatar-bucket',
-      Key: 'users/user-1/avatar/file.jpg',
+  it('deletes uploaded assets by public_id', async () => {
+    destroyMock.mockResolvedValue({ result: 'ok' });
+
+    await service.deleteObject('users/user-1/avatar/1234-uuid');
+
+    expect(destroyMock).toHaveBeenCalledWith('users/user-1/avatar/1234-uuid', {
+      resource_type: 'image',
     });
   });
 
-  it('fails when required aws config is missing', async () => {
-    config.AWS_S3_BUCKET = '';
+  it('fails when required Cloudinary config is missing', async () => {
+    config.CLOUDINARY_API_SECRET = '';
     const file = {
       mimetype: 'image/jpeg',
       buffer: Buffer.from('avatar'),

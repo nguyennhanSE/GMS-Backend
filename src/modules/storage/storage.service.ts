@@ -3,12 +3,8 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import {
-  DeleteObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import { v2 as cloudinary } from 'cloudinary';
 import { AppLogger } from '../../libs/logger';
 import { config } from '../../libs/config';
 
@@ -23,29 +19,24 @@ type UploadUserAvatarResult = {
   contentType: string;
 };
 
+type CloudinaryUploadResult = {
+  public_id?: string;
+  secure_url?: string;
+};
+
+type RejectWithError = (reason: Error) => void;
+
 const MIME_EXTENSION_MAP: Record<string, string> = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
 };
 
 @Injectable()
 export class StorageService {
   private readonly context = StorageService.name;
-  private readonly s3Client: S3Client;
 
-  constructor(private readonly logger: AppLogger) {
-    this.s3Client = new S3Client({
-      region: config.AWS_REGION || undefined,
-      credentials:
-        config.AWS_ACCESS_KEY_ID && config.AWS_SECRET_ACCESS_KEY
-          ? {
-              accessKeyId: config.AWS_ACCESS_KEY_ID,
-              secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
-            }
-          : undefined,
-    });
-  }
+  constructor(private readonly logger: AppLogger) {}
 
   async uploadUserAvatar(
     params: UploadUserAvatarParams,
@@ -53,26 +44,21 @@ export class StorageService {
     this.assertConfigured();
 
     const contentType = this.resolveContentType(params.file.mimetype);
-    const key = this.buildAvatarKey(params.userId, contentType);
-
-    await this.s3Client.send(
-      new PutObjectCommand({
-        Bucket: config.AWS_S3_BUCKET,
-        Key: key,
-        Body: params.file.buffer,
-        ContentType: contentType,
-      }),
-    );
+    const upload = await this.uploadBuffer({
+      userId: params.userId,
+      file: params.file,
+      contentType,
+    });
 
     this.logger.debug(
-      `[${this.context}] Uploaded user avatar`,
-      { userId: params.userId, key },
+      `[${this.context}] Uploaded user avatar to Cloudinary`,
+      { userId: params.userId, key: upload.public_id },
       this.context,
     );
 
     return {
-      url: this.buildPublicUrl(key),
-      key,
+      url: upload.secure_url,
+      key: upload.public_id,
       contentType,
     };
   }
@@ -80,15 +66,12 @@ export class StorageService {
   async deleteObject(key: string): Promise<void> {
     this.assertConfigured();
 
-    await this.s3Client.send(
-      new DeleteObjectCommand({
-        Bucket: config.AWS_S3_BUCKET,
-        Key: key,
-      }),
-    );
+    await cloudinary.uploader.destroy(key, {
+      resource_type: 'image',
+    });
 
     this.logger.debug(
-      `[${this.context}] Deleted S3 object`,
+      `[${this.context}] Deleted Cloudinary asset`,
       { key },
       this.context,
     );
@@ -96,10 +79,9 @@ export class StorageService {
 
   private assertConfigured(): void {
     const missing = [
-      ['AWS_REGION', config.AWS_REGION],
-      ['AWS_S3_BUCKET', config.AWS_S3_BUCKET],
-      ['AWS_ACCESS_KEY_ID', config.AWS_ACCESS_KEY_ID],
-      ['AWS_SECRET_ACCESS_KEY', config.AWS_SECRET_ACCESS_KEY],
+      ['CLOUDINARY_CLOUD_NAME', config.CLOUDINARY_CLOUD_NAME],
+      ['CLOUDINARY_API_KEY', config.CLOUDINARY_API_KEY],
+      ['CLOUDINARY_API_SECRET', config.CLOUDINARY_API_SECRET],
     ]
       .filter(([, value]) => !value)
       .map(([key]) => key);
@@ -109,6 +91,12 @@ export class StorageService {
         `Storage service is not configured: missing ${missing.join(', ')}`,
       );
     }
+
+    cloudinary.config({
+      cloud_name: config.CLOUDINARY_CLOUD_NAME,
+      api_key: config.CLOUDINARY_API_KEY,
+      api_secret: config.CLOUDINARY_API_SECRET,
+    });
   }
 
   private resolveContentType(mimeType: string): string {
@@ -119,17 +107,65 @@ export class StorageService {
     return mimeType;
   }
 
-  private buildAvatarKey(userId: string, mimeType: string): string {
-    const extension = MIME_EXTENSION_MAP[mimeType];
-    return `users/${userId}/avatar/${Date.now()}-${randomUUID()}${extension}`;
-  }
+  private async uploadBuffer(params: {
+    userId: string;
+    file: Express.Multer.File;
+    contentType: string;
+  }): Promise<{ public_id: string; secure_url: string }> {
+    if (!params.file.buffer) {
+      throw new InternalServerErrorException(
+        'Avatar upload requires an in-memory file buffer',
+      );
+    }
 
-  private buildPublicUrl(key: string): string {
-    const encodedKey = key
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/');
+    const publicId = `${Date.now()}-${randomUUID()}`;
 
-    return `https://${config.AWS_S3_BUCKET}.s3.${config.AWS_REGION}.amazonaws.com/${encodedKey}`;
+    const result = await new Promise<CloudinaryUploadResult>(
+      (resolve, reject: RejectWithError) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'image',
+            folder: `users/${params.userId}/avatar`,
+            public_id: publicId,
+            overwrite: false,
+            format: MIME_EXTENSION_MAP[params.contentType],
+          },
+          (error, uploadResult) => {
+          if (error) {
+            const uploadError =
+              error instanceof Error
+                ? error
+                : new Error('Cloudinary upload failed');
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+            reject(uploadError);
+            return;
+          }
+
+          if (!uploadResult) {
+            const missingResultError = new Error(
+              'Cloudinary upload did not return a result',
+            );
+            reject(missingResultError);
+            return;
+          }
+
+            resolve(uploadResult);
+          },
+        );
+
+        stream.end(params.file.buffer);
+      },
+    );
+
+    if (!result.public_id || !result.secure_url) {
+      throw new InternalServerErrorException(
+        'Cloudinary upload response is missing required fields',
+      );
+    }
+
+    return {
+      public_id: result.public_id,
+      secure_url: result.secure_url,
+    };
   }
 }

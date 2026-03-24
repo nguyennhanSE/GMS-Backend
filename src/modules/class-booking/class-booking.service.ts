@@ -529,29 +529,29 @@ export class ClassBookingService {
   async cancelByPayment(
     bookingId: string,
     reason: string,
-  ): Promise<boolean> {
+  ): Promise<ClassBookingEntity | null> {
     const booking = await this.findOne(bookingId);
 
     if (booking.status === BOOKING_STATUS.CANCELLED) {
       this.logger.log(`Booking ${bookingId} already cancelled — skipping`);
-      return false;
+      return null;
     }
 
     if (booking.status === BOOKING_STATUS.ATTENDED) {
       this.logger.warn(
         `Booking ${bookingId} is 'attended', cannot cancel by payment`,
       );
-      return false;
+      return null;
     }
 
-    await this.classBookingRepository.update(bookingId, {
+    const updated = await this.classBookingRepository.update(bookingId, {
       status: BOOKING_STATUS.CANCELLED,
     });
 
     this.logger.log(
       `Booking ${bookingId} cancelled by payment (reason: ${reason})`,
     );
-    return true;
+    return updated;
   }
 
   /**

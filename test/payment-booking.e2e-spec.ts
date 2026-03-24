@@ -334,7 +334,7 @@ describe('Payment-Booking Integration (e2e)', () => {
         'PAYMENT_FAILED',
       );
 
-      expect(result.status).toBe('cancelled');
+      expect(result).toEqual(expect.objectContaining({ status: 'cancelled' }));
     });
 
     it('should be idempotent for cancelByPayment', async () => {
@@ -348,7 +348,7 @@ describe('Payment-Booking Integration (e2e)', () => {
         'PAYMENT_FAILED',
       );
 
-      expect(result.status).toBe('cancelled');
+      expect(result).toBeNull();
     });
 
     it('should throw NotFoundException for non-existent booking', async () => {

@@ -119,7 +119,11 @@ describe('BookingPaymentConsumer', () => {
   describe('handlePaymentFailed', () => {
     it('should cancel booking and ack on success', async () => {
       const payload = createPayload({ status: 'FAILED' as any });
-      classBookingService.cancelByPayment.mockResolvedValue(true);
+      classBookingService.cancelByPayment.mockResolvedValue({
+        id: 'booking-1',
+        status: 'cancelled',
+        userId: 'user-1',
+      });
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
         email: 'member@test.local',
@@ -146,7 +150,7 @@ describe('BookingPaymentConsumer', () => {
 
     it('should not emit a local notification event when booking state did not change', async () => {
       const payload = createPayload({ status: 'FAILED' as any });
-      classBookingService.cancelByPayment.mockResolvedValue(false);
+      classBookingService.cancelByPayment.mockResolvedValue(null);
 
       await consumer.handlePaymentFailed(payload, createContext());
 
@@ -158,7 +162,11 @@ describe('BookingPaymentConsumer', () => {
   describe('handlePaymentRefunded', () => {
     it('should cancel booking and ack on success', async () => {
       const payload = createPayload({ status: 'REFUNDED' as any });
-      classBookingService.cancelByPayment.mockResolvedValue({});
+      classBookingService.cancelByPayment.mockResolvedValue({
+        id: 'booking-1',
+        status: 'cancelled',
+        userId: 'user-1',
+      });
 
       await consumer.handlePaymentRefunded(payload, createContext());
 

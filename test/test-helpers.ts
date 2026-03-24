@@ -94,6 +94,8 @@ export async function createTestData(prisma: PrismaService): Promise<TestData> {
   // Hash password properly using bcrypt
   const hashedPassword = await bcrypt.hash(testPassword, 10);
 
+  await cleanupTestData(prisma);
+
   // Get or create roles (UPPERCASE to match ERoleName enum)
   let memberRole = await prisma.role.findFirst({ where: { name: 'MEMBER' } });
   let adminRole = await prisma.role.findFirst({ where: { name: 'ADMIN' } });

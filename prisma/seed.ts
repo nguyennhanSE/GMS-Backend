@@ -386,7 +386,85 @@ async function main() {
     bodyPumpClass,
   ] = gymClasses;
 
+  const workoutExercises = [
+    {
+      name: 'Back Squat',
+      description: 'Barbell squat emphasizing quadriceps and glutes.',
+      category: 'Strength',
+      equipmentRequired: 'Barbell',
+    },
+    {
+      name: 'Bench Press',
+      description: 'Horizontal press targeting chest, shoulders, and triceps.',
+      category: 'Strength',
+      equipmentRequired: 'Barbell',
+    },
+    {
+      name: 'Deadlift',
+      description: 'Hip hinge compound lift for posterior chain strength.',
+      category: 'Strength',
+      equipmentRequired: 'Barbell',
+    },
+    {
+      name: 'Overhead Press',
+      description: 'Standing barbell press for shoulders and triceps.',
+      category: 'Strength',
+      equipmentRequired: 'Barbell',
+    },
+    {
+      name: 'Pull-Up',
+      description: 'Vertical pulling movement for back and arms.',
+      category: 'Strength',
+      equipmentRequired: 'Pull-up Bar',
+    },
+    {
+      name: 'Barbell Row',
+      description: 'Bent-over row for lats, rhomboids, and rear delts.',
+      category: 'Strength',
+      equipmentRequired: 'Barbell',
+    },
+    {
+      name: 'Walking Lunge',
+      description: 'Unilateral lower-body movement for legs and stability.',
+      category: 'Strength',
+      equipmentRequired: 'Dumbbells',
+    },
+    {
+      name: 'Leg Press',
+      description: 'Machine-based lower body pressing movement.',
+      category: 'Strength',
+      equipmentRequired: 'Leg Press Machine',
+    },
+    {
+      name: 'Hack Squat',
+      description: 'Machine squat variation often used as a squat substitute.',
+      category: 'Strength',
+      equipmentRequired: 'Hack Squat Machine',
+    },
+    {
+      name: 'Plank',
+      description: 'Isometric core bracing exercise.',
+      category: 'Core',
+      equipmentRequired: 'Bodyweight',
+    },
+  ];
+
+  const seededExercises = await Promise.all(
+    workoutExercises.map((exercise) =>
+      prisma.exercise.upsert({
+        where: { name: exercise.name },
+        update: {
+          description: exercise.description,
+          category: exercise.category,
+          equipmentRequired: exercise.equipmentRequired,
+        },
+        create: exercise,
+      }),
+    ),
+  );
+
   console.log(`✅ Created ${gymClasses.length} gym class templates`);
+  console.log(`✅ Created ${seededExercises.length} workout exercises`);
 
   // Helper to create time from hours and minutes (for schedule times)
   const createTimeForSchedule = (hour: number, minute: number = 0): Date => {

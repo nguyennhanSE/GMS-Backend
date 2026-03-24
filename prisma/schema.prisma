@@ -43,6 +43,9 @@ model User {
   classSchedules ClassSchedule[]
   feedbacks Feedback[]
   notifications Notification[]
+  workoutPlansCreated WorkoutPlan[] @relation("WorkoutPlanTrainer")
+  workoutPlanAssignments WorkoutPlanAssignment[] @relation("WorkoutPlanMember")
+  workoutSessions WorkoutSession[] @relation("WorkoutSessionMember")
   @@map("users")
 }
 
@@ -407,5 +410,141 @@ model Feedback {
 
   @@index([userId])
   @@map("feedbacks")
+}
+
+enum WorkoutPlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum WorkoutPlanVisibility {
+  PRIVATE
+  ASSIGNED
+  PUBLIC
+}
+
+enum WorkoutSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model Exercise {
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String    @unique @db.VarChar(255)
+  description       String?   @db.Text
+  category          String    @db.VarChar(100)
+  equipmentRequired String?   @map("equipment_required") @db.VarChar(100)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  planItems PlanItem[]
+  setLogs   ExerciseSetLog[]
+
+  @@index([category])
+  @@map("exercises")
+}
+
+model WorkoutPlan {
+  id          String                @id @default(uuid()) @db.Uuid
+  trainerId   String                @map("trainer_id") @db.Uuid
+  title       String                @db.VarChar(255)
+  duration    Int?                  @map("duration_minutes")
+  status      WorkoutPlanStatus     @default(DRAFT)
+  visibility  WorkoutPlanVisibility @default(PRIVATE)
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime?             @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  trainer     User                  @relation("WorkoutPlanTrainer", fields: [trainerId], references: [id], onDelete: Restrict)
+  planItems   PlanItem[]
+  sessions    WorkoutSession[]
+  assignments WorkoutPlanAssignment[]
+
+  @@index([trainerId, visibility])
+  @@index([trainerId, status])
+  @@index([visibility, status])
+  @@map("workout_plans")
+}
+
+model WorkoutPlanAssignment {
+  id            String      @id @default(uuid()) @db.Uuid
+  workoutPlanId String      @map("workout_plan_id") @db.Uuid
+  memberId      String      @map("member_id") @db.Uuid
+  assignedAt    DateTime    @default(now()) @map("assigned_at") @db.Timestamp(6)
+
+  workoutPlan   WorkoutPlan @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
+  member        User        @relation("WorkoutPlanMember", fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([workoutPlanId, memberId])
+  @@index([memberId])
+  @@index([workoutPlanId])
+  @@map("workout_plan_assignments")
+}
+
+model PlanItem {
+  id            String      @id @default(uuid()) @db.Uuid
+  workoutPlanId String      @map("workout_plan_id") @db.Uuid
+  exerciseId    String      @map("exercise_id") @db.Uuid
+  sequence      Int         @map("sequence")
+  targetSet     Int?        @map("target_set")
+  targetRep     Int?        @map("target_rep")
+  targetWeight  Decimal?    @map("target_weight") @db.Decimal(6, 2)
+  dayOfWeek     DayOfWeek?  @map("day_of_week")
+  notes         String?     @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime?   @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  workoutPlan   WorkoutPlan @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
+  exercise      Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  setLogs       ExerciseSetLog[]
+
+  @@unique([workoutPlanId, sequence])
+  @@index([workoutPlanId, sequence])
+  @@index([exerciseId])
+  @@index([dayOfWeek])
+  @@map("plan_items")
+}
+
+model WorkoutSession {
+  id            String               @id @default(uuid()) @db.Uuid
+  memberId      String               @map("member_id") @db.Uuid
+  workoutPlanId String?              @map("workout_plan_id") @db.Uuid
+  startTime     DateTime             @map("start_time")
+  endTime       DateTime?            @map("end_time")
+  status        WorkoutSessionStatus @default(IN_PROGRESS)
+  notes         String?              @db.Text
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime?            @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  member        User                 @relation("WorkoutSessionMember", fields: [memberId], references: [id], onDelete: Restrict)
+  workoutPlan   WorkoutPlan?         @relation(fields: [workoutPlanId], references: [id], onDelete: SetNull)
+  setLogs       ExerciseSetLog[]
+
+  @@index([memberId, startTime])
+  @@index([workoutPlanId])
+  @@index([status])
+  @@map("workout_sessions")
+}
+
+model ExerciseSetLog {
+  id               String         @id @default(uuid()) @db.Uuid
+  workoutSessionId String         @map("workout_session_id") @db.Uuid
+  exerciseId       String         @map("exercise_id") @db.Uuid
+  planItemId       String?        @map("plan_item_id") @db.Uuid
+  setNumber        Int            @map("set_number")
+  actualRep        Int            @map("actual_rep")
+  actualWeight     Decimal        @map("actual_weight") @db.Decimal(6, 2)
+  rpe              Int?           @db.SmallInt
+  completedAt      DateTime       @default(now()) @map("completed_at") @db.Timestamp(6)
+
+  session          WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exercise         Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  planItem         PlanItem?      @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+
+  @@index([workoutSessionId, setNumber])
+  @@index([exerciseId])
+  @@index([planItemId])
+  @@map("exercise_set_logs")
 }
 

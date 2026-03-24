@@ -21,6 +21,7 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { SupportModule } from './modules/support/support.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { WorkoutModule } from './modules/workout/workout.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { NotificationModule } from './modules/notification/notification.module';
     SupportModule,
     ReportingModule,
     NotificationModule,
+    WorkoutModule,
   ],
   controllers: [AppController],
   providers: [

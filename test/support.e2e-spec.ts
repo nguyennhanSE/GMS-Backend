@@ -4,6 +4,7 @@ import * as supertest from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodemailerService } from '../src/libs/integration/nodemailer/nodemailer.service';
+import { config } from '../src/libs/config';
 import {
   TestData,
   loginAs,
@@ -158,6 +159,9 @@ describe('Support Feedback (e2e)', () => {
       expect(mockNodemailerService.sendEmail).toHaveBeenCalledTimes(1);
       expect(mockNodemailerService.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
+          to: config.EMAIL_USER,
+          from: config.EMAIL_FROM || config.EMAIL_USER,
+          replyTo: testData.memberUser.email,
           subject: expect.stringContaining('[Support Feedback]'),
         }),
       );

@@ -401,6 +401,7 @@ This is an automated message from Liflow System
       this.logger.log(`Sending support feedback email to admin`, { userEmail, subject });
 
       const adminEmail = config.EMAIL_USER;
+      const senderEmail = config.EMAIL_FROM?.trim() || adminEmail;
       if (!adminEmail) {
         this.logger.error('Cannot send support feedback: EMAIL_USER not configured');
         return false;
@@ -412,6 +413,8 @@ This is an automated message from Liflow System
 
       const result = await this.nodemailerService.sendEmail({
         to: adminEmail,
+        from: senderEmail,
+        replyTo: userEmail,
         subject: emailSubject,
         html,
         text,

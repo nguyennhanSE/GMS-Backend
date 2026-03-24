@@ -91,6 +91,7 @@ export class NodemailerService implements IEmailService {
             const mailOptions = {
                 from,
                 to: data.to,
+                replyTo: data.replyTo,
                 subject: data.subject,
                 html: data.html,
                 text: data.text,

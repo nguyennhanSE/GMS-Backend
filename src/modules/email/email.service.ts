@@ -9,6 +9,16 @@ export interface NotificationEmailRecipient {
   email: string;
 }
 
+export interface VerificationEmailRecipient {
+  id: string;
+  name: string;
+  email: string;
+}
+
+type VerificationEmailOptions = {
+  requiresPasswordSetup: boolean;
+};
+
 @Injectable()
 export class UserEmailService {
   private readonly logger = new Logger(UserEmailService.name);
@@ -96,6 +106,55 @@ export class UserEmailService {
       return result;
     } catch (error) {
       this.logger.error(`Error sending password changed email to ${user.email}`, error);
+      return false;
+    }
+  }
+
+  async sendAccountVerificationEmail(
+    user: VerificationEmailRecipient,
+    verificationUrl: string,
+    options: VerificationEmailOptions,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(`Sending account verification email to ${user.email}`, {
+        userId: user.id,
+      });
+
+      const subject = 'Verify Your Liflow Account';
+      const html = this.getAccountVerificationEmailTemplate(
+        user,
+        verificationUrl,
+        options,
+      );
+      const text = this.getAccountVerificationEmailText(
+        user,
+        verificationUrl,
+        options,
+      );
+
+      const result = await this.nodemailerService.sendEmail({
+        to: user.email,
+        subject,
+        html,
+        text,
+      });
+
+      if (result) {
+        this.logger.log(
+          `Account verification email sent successfully to ${user.email}`,
+        );
+      } else {
+        this.logger.error(
+          `Failed to send account verification email to ${user.email}`,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Error sending account verification email to ${user.email}`,
+        error,
+      );
       return false;
     }
   }
@@ -336,6 +395,111 @@ Best regards,
 Liflow Team
 
 This is an automated message from Liflow System
+    `;
+  }
+
+  private getAccountVerificationEmailTemplate(
+    user: VerificationEmailRecipient,
+    verificationUrl: string,
+    options: VerificationEmailOptions,
+  ): string {
+    const intro = options.requiresPasswordSetup
+      ? 'Your account has been created by an administrator, but you need to verify your email address and set your password before you can log in.'
+      : 'Your account registration has been received. Please verify your email address to activate your account.';
+    const action = options.requiresPasswordSetup
+      ? 'Please click the button below to open the setup page and finish activating your account:'
+      : 'Please click the button below to open the verification page and activate your account:';
+    const buttonLabel = options.requiresPasswordSetup
+      ? 'Open Password Setup Page'
+      : 'Open Verification Page';
+    const followUp = options.requiresPasswordSetup
+      ? 'Opening the link alone does not activate the account; you must complete password setup on the verification page'
+      : 'Opening the link alone does not activate the account; you must confirm activation on the verification page';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Verify Your Account</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background-color: #f9f9f9; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white !important; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 15px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Verify Your Liflow Account</h1>
+          </div>
+          <div class="content">
+            <h2>Hello ${user.name}!</h2>
+            <p>${intro}</p>
+            <p>${action}</p>
+            <p>
+              <a class="button" href="${verificationUrl}">${buttonLabel}</a>
+            </p>
+            <p>If the button does not work, copy and paste this URL into your browser:</p>
+            <p>${verificationUrl}</p>
+
+            <div class="warning">
+              <strong>Important:</strong>
+              <ul>
+                <li>This verification link expires automatically</li>
+                <li>${followUp}</li>
+                <li>Your account will remain inactive until verification is complete</li>
+                <li>If you did not expect this account, you can ignore this email</li>
+              </ul>
+            </div>
+          </div>
+          <div class="footer">
+            <p>This is an automated message from Liflow System</p>
+            <p>Please do not reply to this email</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  private getAccountVerificationEmailText(
+    user: VerificationEmailRecipient,
+    verificationUrl: string,
+    options: VerificationEmailOptions,
+  ): string {
+    const intro = options.requiresPasswordSetup
+      ? 'Your account has been created by an administrator, but you need to verify your email address and set your password before you can log in.'
+      : 'Your account registration has been received. Please verify your email address to activate your account.';
+    const action = options.requiresPasswordSetup
+      ? 'Open this link to review the verification request and set your password:'
+      : 'Open this link to review the verification request and activate your account:';
+    const followUp = options.requiresPasswordSetup
+      ? 'Opening the link alone does not activate the account; you must complete password setup on the verification page'
+      : 'Opening the link alone does not activate the account; you must confirm activation on the verification page';
+
+    return `
+Verify Your Liflow Account
+
+Hello ${user.name}!
+
+${intro}
+
+${action}
+${verificationUrl}
+
+Important:
+- This verification link expires automatically
+- ${followUp}
+- Your account will remain inactive until verification is complete
+- If you did not expect this account, you can ignore this email
+
+This is an automated message from Liflow System
+Please do not reply to this email
     `;
   }
 

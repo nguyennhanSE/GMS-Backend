@@ -1,5 +1,10 @@
 import { Injectable, BadRequestException, UnauthorizedException, NotFoundException } from "@nestjs/common";
-import { LoginDto, LogoutDto, RefreshTokenRequestDto } from "./dto/auth.dto";
+import {
+    LoginDto,
+    LogoutDto,
+    RefreshTokenRequestDto,
+    RegisterMemberDto,
+} from "./dto/auth.dto";
 import { TokenPayload } from "../../libs/constants/interface";
 import { tokenType } from "src/common/enums";
 import { config } from "src/libs/config";
@@ -21,6 +26,18 @@ export class AuthService {
         private readonly logger: AppLogger,
     ) {
         this.errorCode = this.context;
+    }
+
+    async registerMember(dto: RegisterMemberDto) {
+        this.logger.debug(`[${this.context}] registerMember start`, {
+            email: dto.email,
+        });
+        try {
+            return await this.userService.registerMember(dto);
+        } catch (err) {
+            this.logger.error(`[${this.context}] registerMember failed`, err);
+            throw err;
+        }
     }
 
     // Login

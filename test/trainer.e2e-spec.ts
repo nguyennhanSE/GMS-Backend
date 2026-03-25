@@ -180,6 +180,12 @@ describe('Trainer Integration (e2e)', () => {
       // Password should NOT be in response
       expect(res.body.data.password).toBeUndefined();
       trainerUserId = res.body.data.id;
+
+      const roles = await prisma.userRole.findMany({
+        where: { userId: trainerUserId },
+        include: { role: true },
+      });
+      expect(roles.map((item) => item.role.name)).toEqual(['TRAINER']);
     });
 
     it('[T2] trainer should be able to login with admin-set password', async () => {
@@ -198,7 +204,24 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.body.data.accessToken).toBeDefined();
     });
 
-    it('[T3] should reject creating trainer with short password', async () => {
+    it('[T3] should reject trainer create requests that try to set role', async () => {
+      const res = await adminPost('/trainer/create').send({
+        firstName: 'Role',
+        lastName: 'Override',
+        email: 'trainer-role-override@e2e.local',
+        password: 'RolePass@12345',
+        role: 'ADMIN',
+      });
+
+      expect(res.status).toBe(400);
+      expect(
+        Array.isArray(res.body?.message)
+          ? res.body.message.join(' ')
+          : String(res.body?.message ?? res.body?.error?.message ?? ''),
+      ).toContain('role should not exist');
+    });
+
+    it('[T4] should reject creating trainer with short password', async () => {
       const res = await adminPost('/trainer/create').send({
         firstName: 'Bad',
         lastName: 'Pass',
@@ -209,7 +232,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.status).toBe(400);
     });
 
-    it('[T4] should reject duplicate email', async () => {
+    it('[T5] should reject duplicate email', async () => {
       const res = await adminPost('/trainer/create').send({
         firstName: 'Dup',
         lastName: 'Email',
@@ -220,14 +243,14 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.status).toBe(400);
     });
 
-    it('[T5] should get trainer by ID', async () => {
+    it('[T6] should get trainer by ID', async () => {
       const res = await adminGet(`/trainer/${trainerUserId}`);
 
       expect(res.status).toBe(200);
       expect(res.body.data.email).toBe(TRAINER_EMAIL);
     });
 
-    it('[T6] should update trainer', async () => {
+    it('[T7] should update trainer', async () => {
       const res = await adminPatch(`/trainer/${trainerUserId}`).send({
         firstName: 'Updated',
       });
@@ -240,7 +263,7 @@ describe('Trainer Integration (e2e)', () => {
   // ─── Scope 2: Availability CRUD ──────────────────────────────────
 
   describe('Availability CRUD', () => {
-    it('[T7] should set trainer availability (bulk)', async () => {
+    it('[T8] should set trainer availability (bulk)', async () => {
       const res = await adminPut(
         `/trainer/${trainerUserId}/availability`,
       ).send({
@@ -257,7 +280,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.body.data.availability.length).toBe(4);
     });
 
-    it('[T8] should get trainer availability', async () => {
+    it('[T9] should get trainer availability', async () => {
       const res = await adminGet(
         `/trainer/${trainerUserId}/availability`,
       );
@@ -268,7 +291,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.body.data.trainerId).toBe(trainerUserId);
     });
 
-    it('[T9] should replace availability on re-set', async () => {
+    it('[T10] should replace availability on re-set', async () => {
       // Set new availability (should replace all existing)
       const res = await adminPut(
         `/trainer/${trainerUserId}/availability`,
@@ -288,7 +311,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(getRes.body.data.availability.length).toBe(1);
     });
 
-    it('[T10] should delete a single availability slot', async () => {
+    it('[T11] should delete a single availability slot', async () => {
       // First set some slots
       await adminPut(`/trainer/${trainerUserId}/availability`).send({
         slots: [
@@ -316,7 +339,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(afterRes.body.data.availability.length).toBe(1);
     });
 
-    it('[T11] should return 404 for non-existent trainer', async () => {
+    it('[T12] should return 404 for non-existent trainer', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000000';
       const res = await adminGet(`/trainer/${fakeId}/availability`);
 
@@ -365,7 +388,7 @@ describe('Trainer Integration (e2e)', () => {
       });
     });
 
-    it('[T12] Layer 1: should REJECT schedule outside working hours (trainer has no TUE availability)', async () => {
+    it('[T13] Layer 1: should REJECT schedule outside working hours (trainer has no TUE availability)', async () => {
       // Arrange: trainer is available MON 09:00-17:00, NOT Tuesday
       // Act: try to create a schedule on TUESDAY
       const res = await adminPost('/class-schedule/create').send({
@@ -383,7 +406,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.body.error?.message ?? res.body.message).toContain('Cannot create schedule');
     });
 
-    it('[T13] Layer 1: should ACCEPT schedule within working hours (MON 10:00-11:00)', async () => {
+    it('[T14] Layer 1: should ACCEPT schedule within working hours (MON 10:00-11:00)', async () => {
       // Arrange: trainer IS available MON 09:00-17:00
       // Act: create a schedule on MON within working hours
       const res = await adminPost('/class-schedule/create').send({
@@ -402,7 +425,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.body.data.trainerId).toBe(trainerUserId);
     });
 
-    it('[T14] Layer 2: should REJECT double-booking (same trainer, overlapping time)', async () => {
+    it('[T15] Layer 2: should REJECT double-booking (same trainer, overlapping time)', async () => {
       // Arrange: T13 already created MON 10:00-11:00 for this trainer
       // Act: try to book the same trainer MON 10:30-11:30 (overlaps!)
       const res = await adminPost('/class-schedule/create').send({
@@ -419,7 +442,7 @@ describe('Trainer Integration (e2e)', () => {
       expect(res.status).toBe(400);
     });
 
-    it('[T15] Both Layers: should ACCEPT non-overlapping schedule on same day', async () => {
+    it('[T16] Both Layers: should ACCEPT non-overlapping schedule on same day', async () => {
       // Arrange: trainer has MON 10:00-11:00 booked
       // Act: create MON 14:00-15:00 (within working hours, no overlap)
       const res = await adminPost('/class-schedule/create').send({
@@ -441,7 +464,7 @@ describe('Trainer Integration (e2e)', () => {
   // ─── Scope 4: Trainer Delete ───────────────────────────────────────
 
   describe('Trainer Delete', () => {
-    it('[T16] should delete trainer and cascade availability', async () => {
+    it('[T17] should delete trainer and cascade availability', async () => {
       // Verify availability exists before delete
       const beforeAvail = await prisma.trainerAvailability.count({
         where: { trainerId: trainerUserId },

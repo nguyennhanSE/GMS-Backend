@@ -6,9 +6,18 @@ import { PrismaModule } from '../../../prisma/prisma.module';
 import { RolesModule } from '../roles/roles.module';
 import { LoggerModule } from '../../libs/logger/logger.module';
 import { StorageModule } from '../storage/storage.module';
+import { EmailModule } from '../email/email.module';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
-  imports: [PrismaModule, RolesModule, LoggerModule, StorageModule],
+  imports: [
+    PrismaModule,
+    RolesModule,
+    LoggerModule,
+    StorageModule,
+    EmailModule,
+    JwtModule,
+  ],
   controllers: [UserController],
   providers: [UserService, UserRepository],
   exports: [UserService],

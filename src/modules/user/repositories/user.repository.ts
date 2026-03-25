@@ -91,7 +91,9 @@ export class UserRepository {
   /**
    * Create a new user
    */
-  async createUser(createUserDto: CreateUserDto): Promise<UserEntity> {
+  async createUser(
+    createUserDto: CreateUserDto & { password: string; status?: string | null },
+  ): Promise<UserEntity> {
     const roleName = createUserDto.role ?? ERoleName.MEMBER;
 
     const role = await this.prisma.role.findUnique({

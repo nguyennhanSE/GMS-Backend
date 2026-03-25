@@ -54,17 +54,6 @@ export class CreateUserDto {
   @trim()
   email!: string;
 
-  @ApiProperty({
-    description: 'User password',
-    example: 'SecurePass@123',
-    minLength: 8,
-    maxLength: 128,
-  })
-  @IsString()
-  @MinLength(8)
-  @MaxLength(128)
-  password!: string;
-
   @ApiPropertyOptional({
     description: 'User role (defaults to MEMBER if not provided)',
     example: ERoleName.MEMBER,
@@ -109,16 +98,44 @@ export class CreateUserDto {
   @IsString()
   address?: string;
 
+}
+export class CreateUser extends CreateUserDto {}
+
+export class VerifyEmailDto {
+  @ApiProperty({
+    description: 'Signed email verification token',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  @IsString()
+  @IsNotEmpty()
+  token!: string;
+
   @ApiPropertyOptional({
-    description: 'Status',
-    example: 'active',
+    description:
+      'New password chosen during account activation when the verification flow requires password setup',
+    example: 'SecurePass@123',
+    minLength: 8,
+    maxLength: 128,
   })
   @IsOptional()
   @IsString()
-  @trim()
-  status?: string;
+  @MinLength(8)
+  @MaxLength(128)
+  password?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Confirmation of the new password when the verification flow requires password setup',
+    example: 'SecurePass@123',
+    minLength: 8,
+    maxLength: 128,
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  confirmPassword?: string;
 }
-export class CreateUser extends CreateUserDto {}
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ description: 'User first name', example: 'John' })

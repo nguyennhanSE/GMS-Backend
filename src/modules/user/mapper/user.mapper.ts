@@ -96,7 +96,9 @@ export function toUserEntityWithRelations(user: UserWithRelations): UserEntity {
 /**
  * Maps CreateUserDto to Prisma User create input
  */
-export function toPrismaUserCreateInput(dto: CreateUserDto & { password: string }) {
+export function toPrismaUserCreateInput(
+  dto: CreateUserDto & { password: string; status?: string | null },
+) {
   return {
     password: dto.password,
     firstName: dto.firstName,

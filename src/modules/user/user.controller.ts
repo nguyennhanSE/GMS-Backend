@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Controller,
   Get,
+  HttpCode,
   Post,
   Body,
   Patch,
@@ -10,12 +12,18 @@ import {
   ParseUUIDPipe,
   Req,
   ForbiddenException,
+  Header,
   ParseFilePipeBuilder,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { UserService } from './user.service';
-import { CreateUserDto, GetUsersQueryDto, UpdateUserDto } from './dto/user.dto';
+import {
+  CreateUserDto,
+  GetUsersQueryDto,
+  UpdateUserDto,
+  VerifyEmailDto,
+} from './dto/user.dto';
 import { Roles } from '../../libs/decorator/roles.decorator';
 import { ERoleName } from '../roles/enums/role.enum';
 import { toResponse } from './mapper/user.mapper';
@@ -27,6 +35,7 @@ import {
   ApiParam,
   ApiBody,
   ApiConsumes,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ResponseModel } from '../../libs/models/response/response.model';
 import { RolesService } from '../roles/roles.service';
@@ -35,6 +44,7 @@ import type { Request } from 'express';
 import { TokenPayload } from 'src/libs/constants/interface';
 import { CurrentUser } from '../../libs/decorator/current-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Public } from '../../libs/decorator/public.decorator';
 
 @ApiTags('User Management')
 @ApiBearerAuth()
@@ -47,8 +57,14 @@ export class UserController {
 
   @Post('create')
   @Roles(ERoleName.ADMIN)
-  @ApiOperation({ summary: 'Create a new user with role assignment' })
-  @ApiResponse({ status: 201, description: 'User created successfully' })
+  @ApiOperation({
+    summary: 'Create a new user and send a verification link for password setup',
+  })
+  @ApiResponse({
+    status: 201,
+    description:
+      'User created successfully in pending_verification status and password-setup verification email sent',
+  })
   @ApiResponse({
     status: 400,
     description: 'Bad request - validation error or user already exists',
@@ -60,6 +76,103 @@ export class UserController {
       const user = await this.userService.create(createUserDto);
       const result = toResponse(user);
       responseModel.setData(result);
+    } catch (error) {
+      throw error;
+    }
+
+    return responseModel;
+  }
+
+  @Get('verify-email')
+  @Public()
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @ApiOperation({ summary: 'Verify a newly created user email address' })
+  @ApiQuery({
+    name: 'token',
+    required: true,
+    description: 'Signed email verification token',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification landing page returned successfully',
+  })
+  async verifyEmailLanding(@Query('token') token: string) {
+    if (!token?.trim()) {
+      throw new BadRequestException('Verification token is required');
+    }
+
+    const escapedToken = escapeHtmlAttribute(token);
+    const verificationContext =
+      await this.userService.getVerificationContext(token);
+    const passwordFields = verificationContext.requiresPasswordSetup
+      ? `
+            <div class="field">
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" minlength="8" maxlength="128" required>
+            </div>
+            <div class="field">
+              <label for="confirmPassword">Confirm Password</label>
+              <input id="confirmPassword" name="confirmPassword" type="password" minlength="8" maxlength="128" required>
+            </div>
+        `
+      : '';
+    const actionCopy = verificationContext.requiresPasswordSetup
+      ? 'To activate your account, set your password and confirm the request below.'
+      : 'To activate your account, confirm the verification request below.';
+    const submitLabel = verificationContext.requiresPasswordSetup
+      ? 'Set Password and Activate Account'
+      : 'Activate Account';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Verify Your Liflow Account</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 24px; background-color: #f6f7fb; }
+          .card { max-width: 560px; margin: 40px auto; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); }
+          .button { display: inline-block; border: 0; background: #1f7a3d; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 16px; cursor: pointer; }
+          .field { margin: 0 0 16px; }
+          label { display: block; margin: 0 0 8px; font-weight: 600; }
+          input[type="password"] { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; }
+          p { margin: 0 0 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Verify Your Liflow Account</h1>
+          <p>Your verification link has been opened. ${actionCopy}</p>
+          <p>This extra confirmation prevents email scanners and browser prefetchers from activating the account automatically.</p>
+          <form method="post" action="/user/verify-email">
+            <input type="hidden" name="token" value="${escapedToken}">
+            ${passwordFields}
+            <button class="button" type="submit">${submitLabel}</button>
+          </form>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  @Post('verify-email')
+  @Public()
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Activate a verified user, optionally setting the initial password when the verification flow requires it',
+  })
+  @ApiBody({ type: VerifyEmailDto })
+  @ApiResponse({
+    status: 200,
+    description: 'User email verified successfully',
+  })
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    const responseModel = new ResponseModel();
+
+    try {
+      const user = await this.userService.verifyEmail(verifyEmailDto);
+      responseModel.setData(toResponse(user));
     } catch (error) {
       throw error;
     }
@@ -337,4 +450,13 @@ export class UserController {
     }
     return responseModel;
   }
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }

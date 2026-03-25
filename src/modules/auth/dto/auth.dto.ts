@@ -1,5 +1,6 @@
 import {
   // IsEmail,
+  IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -8,7 +9,8 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
+import { CreateUserDto } from '../../user/dto/user.dto';
 
 
 
@@ -79,4 +81,41 @@ export class LogoutDto {
   })
   @IsOptional() @IsString()
   refreshToken?: string;
+}
+
+/** ===================== PUBLIC MEMBER REGISTER ===================== */
+export class RegisterMemberDto extends OmitType(CreateUserDto, ['role'] as const) {
+  @ApiProperty({
+    description: 'Member email',
+    example: 'member@example.com',
+    format: 'email',
+  })
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toLowerCase() : value) as string)
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+
+  @ApiProperty({
+    description: 'Member password',
+    example: 'SecurePass@123',
+    minLength: 8,
+    maxLength: 128,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  @MaxLength(128)
+  password!: string;
+
+  @ApiProperty({
+    description: 'Password confirmation',
+    example: 'SecurePass@123',
+    minLength: 8,
+    maxLength: 128,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  @MaxLength(128)
+  confirmPassword!: string;
 }

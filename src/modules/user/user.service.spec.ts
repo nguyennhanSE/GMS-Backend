@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { JwtService } from '@nestjs/jwt';
 import { AppLogger } from '../../libs/logger';
 import { StorageService } from '../storage/storage.service';
+import { UserEmailService } from '../email/email.service';
 import { UserEntity } from './entities/user.entity';
 import { UserRepository } from './repositories/user.repository';
 import { UserService } from './user.service';
@@ -21,6 +23,7 @@ describe('UserService', () => {
           useValue: {
             getUserByAccount: jest.fn(),
             updateAvatarUrl: jest.fn(),
+            deleteUser: jest.fn(),
           },
         },
         {
@@ -32,6 +35,19 @@ describe('UserService', () => {
           useValue: {
             uploadUserAvatar: jest.fn(),
             deleteObject: jest.fn(),
+          },
+        },
+        {
+          provide: UserEmailService,
+          useValue: {
+            sendAccountVerificationEmail: jest.fn(),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            signAsync: jest.fn(),
+            verifyAsync: jest.fn(),
           },
         },
         {

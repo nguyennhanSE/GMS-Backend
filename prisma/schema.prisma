@@ -43,6 +43,7 @@ model User {
   classSchedules ClassSchedule[]
   feedbacks Feedback[]
   notifications Notification[]
+  chatSessions ChatSession[] @relation("MemberChatSessions")
   workoutPlansCreated WorkoutPlan[] @relation("WorkoutPlanTrainer")
   workoutPlanAssignments WorkoutPlanAssignment[] @relation("WorkoutPlanMember")
   workoutSessions WorkoutSession[] @relation("WorkoutSessionMember")
@@ -100,6 +101,25 @@ enum NotificationType {
   BOOKING
   MEMBERSHIP
   PAYMENT
+}
+
+enum ChatSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum ChatMessageSource {
+  USER
+  RULE
+  COHERE
+  FALLBACK
+  SYSTEM
 }
 
 model Membership {
@@ -410,6 +430,37 @@ model Feedback {
 
   @@index([userId])
   @@map("feedbacks")
+}
+
+model ChatSession {
+  id        String            @id @default(uuid()) @db.Uuid
+  memberId  String            @map("member_id") @db.Uuid
+  status    ChatSessionStatus @default(OPEN)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  closedAt  DateTime?         @map("closed_at") @db.Timestamp(6)
+
+  member    User              @relation("MemberChatSessions", fields: [memberId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+
+  @@index([memberId, status])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String            @id @default(uuid()) @db.Uuid
+  sessionId String            @map("session_id") @db.Uuid
+  role      ChatMessageRole
+  content   String            @db.Text
+  intentKey String?           @map("intent_key") @db.VarChar(100)
+  source    ChatMessageSource
+  metadata  Json?             @map("metadata")
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+
+  session   ChatSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
 }
 
 enum WorkoutPlanStatus {

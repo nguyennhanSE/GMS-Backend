@@ -22,6 +22,7 @@ import { SupportModule } from './modules/support/support.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { WorkoutModule } from './modules/workout/workout.module';
+import { ChatbotModule } from './modules/chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { WorkoutModule } from './modules/workout/workout.module';
     ReportingModule,
     NotificationModule,
     WorkoutModule,
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [

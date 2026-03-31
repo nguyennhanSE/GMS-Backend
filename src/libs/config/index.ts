@@ -56,6 +56,22 @@ export const config = {
   STRIPE_CANCEL_URL:
     process.env.STRIPE_CANCEL_URL ?? 'http://localhost:3000/payment/cancel',
 
+  // Cohere / Chatbot Configuration
+  COHERE_API_URL: process.env.COHERE_API_URL ?? 'https://api.cohere.com/v2/chat',
+  COHERE_API_KEY: process.env.COHERE_API_KEY ?? '',
+  COHERE_MODEL: process.env.COHERE_MODEL ?? 'command-r',
+  CHATBOT_COHERE_ENABLED:
+    process.env.CHATBOT_COHERE_ENABLED === 'true' ||
+    process.env.CHATBOT_COHERE_ENABLED === '1',
+  CHATBOT_SESSION_TTL_HOURS: parseInt(
+    process.env.CHATBOT_SESSION_TTL_HOURS ?? '24',
+    10,
+  ),
+  CHATBOT_CONTEXT_PAIRS: parseInt(
+    process.env.CHATBOT_CONTEXT_PAIRS ?? '5',
+    10,
+  ),
+
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL ?? 'amqp://localhost:5672',
 };

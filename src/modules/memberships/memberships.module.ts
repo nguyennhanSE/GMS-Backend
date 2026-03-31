@@ -16,5 +16,6 @@ import { PaymentModule } from '../payment/payment.module';
     MembershipExpiryNotificationCronService,
     PrismaService,
   ],
+  exports: [MembershipsService],
 })
 export class MembershipsModule {}

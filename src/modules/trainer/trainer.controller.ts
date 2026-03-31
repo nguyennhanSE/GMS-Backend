@@ -9,13 +9,20 @@ import {
   Delete,
   Query,
   Logger,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { TrainerService } from './trainer.service';
 import { CreateTrainerDto } from './dto/create-trainer.dto';
 import { UpdateTrainerDto } from './dto/update-trainer.dto';
 import { GetTrainersQueryDto } from './dto/trainer-query.dto';
 import { SetTrainerAvailabilityDto } from './dto/trainer-availability.dto';
+import {
+  CreateTrainerClientLinkDto,
+  EndTrainerClientLinkDto,
+} from './dto/trainer-client-link.dto';
 import { ResponseModel } from '../../libs/models/response/response.model';
+import { CurrentUser } from '../../libs/decorator/current-user.decorator';
+import type { RequestUser } from '../../libs/decorator/current-user.decorator';
 import { toTrainerResponse } from './mapper/trainer.mapper';
 import {
   ApiTags,
@@ -205,6 +212,66 @@ export class TrainerController {
     responseModel.setData({
       message: `Availability slot ${slotId} deleted successfully`,
     });
+    return responseModel;
+  }
+
+  // ============================================
+  // TRAINER-CLIENT LINK ENDPOINTS
+  // ============================================
+
+  @Post(':trainerId/clients')
+  @Roles(ERoleName.ADMIN, ERoleName.STAFF)
+  @ApiOperation({ summary: 'Create a trainer-client link' })
+  @ApiResponse({
+    status: 201,
+    description: 'Trainer-client link created successfully',
+  })
+  async createTrainerClientLink(
+    @Param('trainerId', ParseUUIDPipe) trainerId: string,
+    @Body() dto: CreateTrainerClientLinkDto,
+  ) {
+    const responseModel = new ResponseModel();
+    const link = await this.trainerService.createTrainerClientLink(
+      trainerId,
+      dto,
+    );
+    responseModel.setData(link);
+    return responseModel;
+  }
+
+  @Patch(':trainerId/clients/:linkId/end')
+  @Roles(ERoleName.ADMIN, ERoleName.STAFF)
+  @ApiOperation({ summary: 'End a trainer-client link' })
+  @ApiResponse({
+    status: 200,
+    description: 'Trainer-client link ended successfully',
+  })
+  async endTrainerClientLink(
+    @Param('trainerId', ParseUUIDPipe) trainerId: string,
+    @Param('linkId', ParseUUIDPipe) linkId: string,
+    @Body() dto: EndTrainerClientLinkDto,
+  ) {
+    const responseModel = new ResponseModel();
+    const link = await this.trainerService.endTrainerClientLink(
+      trainerId,
+      linkId,
+      dto,
+    );
+    responseModel.setData(link);
+    return responseModel;
+  }
+
+  @Get('me/clients')
+  @Roles(ERoleName.TRAINER)
+  @ApiOperation({ summary: 'List active clients for the current trainer' })
+  @ApiResponse({
+    status: 200,
+    description: 'Trainer clients retrieved successfully',
+  })
+  async listTrainerClients(@CurrentUser() user: RequestUser) {
+    const responseModel = new ResponseModel();
+    const links = await this.trainerService.listTrainerClientLinks(user);
+    responseModel.setData(links);
     return responseModel;
   }
 }

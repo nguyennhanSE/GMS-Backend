@@ -11,7 +11,7 @@ CREATE TYPE "WorkoutSessionStatus" AS ENUM ('IN_PROGRESS', 'COMPLETED', 'ABANDON
 
 -- CreateTable
 CREATE TABLE "exercises" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "name" VARCHAR(255) NOT NULL,
     "description" TEXT,
     "category" VARCHAR(100) NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE "exercises" (
 
 -- CreateTable
 CREATE TABLE "workout_plans" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "trainer_id" UUID NOT NULL,
     "title" VARCHAR(255) NOT NULL,
     "duration_minutes" INTEGER,
@@ -38,7 +38,7 @@ CREATE TABLE "workout_plans" (
 
 -- CreateTable
 CREATE TABLE "workout_plan_assignments" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "workout_plan_id" UUID NOT NULL,
     "member_id" UUID NOT NULL,
     "assigned_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -48,7 +48,7 @@ CREATE TABLE "workout_plan_assignments" (
 
 -- CreateTable
 CREATE TABLE "plan_items" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "workout_plan_id" UUID NOT NULL,
     "exercise_id" UUID NOT NULL,
     "sequence" INTEGER NOT NULL,
@@ -65,11 +65,11 @@ CREATE TABLE "plan_items" (
 
 -- CreateTable
 CREATE TABLE "workout_sessions" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "member_id" UUID NOT NULL,
     "workout_plan_id" UUID,
-    "start_time" TIMESTAMP(6) NOT NULL,
-    "end_time" TIMESTAMP(6),
+    "start_time" TIMESTAMP(3) NOT NULL,
+    "end_time" TIMESTAMP(3),
     "status" "WorkoutSessionStatus" NOT NULL DEFAULT 'IN_PROGRESS',
     "notes" TEXT,
     "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -80,7 +80,7 @@ CREATE TABLE "workout_sessions" (
 
 -- CreateTable
 CREATE TABLE "exercise_set_logs" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "workout_session_id" UUID NOT NULL,
     "exercise_id" UUID NOT NULL,
     "plan_item_id" UUID,

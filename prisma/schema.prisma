@@ -40,10 +40,14 @@ model User {
   payments Payment[]
   sessions Session[]
   trainerAvailabilities TrainerAvailability[]
+  trainerClientLinksCreated TrainerClientLink[] @relation("TrainerClientLinkTrainer")
+  memberCoachLinks TrainerClientLink[] @relation("TrainerClientLinkMember")
   classSchedules ClassSchedule[]
   feedbacks Feedback[]
   notifications Notification[]
   chatSessions ChatSession[] @relation("MemberChatSessions")
+  dietPlansCreated DietPlan[] @relation("DietPlanTrainer")
+  dietPlanAssignments DietPlanAssignment[] @relation("DietPlanMember")
   workoutPlansCreated WorkoutPlan[] @relation("WorkoutPlanTrainer")
   workoutPlanAssignments WorkoutPlanAssignment[] @relation("WorkoutPlanMember")
   workoutSessions WorkoutSession[] @relation("WorkoutSessionMember")
@@ -120,6 +124,38 @@ enum ChatMessageSource {
   COHERE
   FALLBACK
   SYSTEM
+}
+
+enum TrainerClientLinkStatus {
+  ACTIVE
+  ENDED
+}
+
+enum DietPlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum DietPlanVisibility {
+  PRIVATE
+  ASSIGNED
+}
+
+enum DietMealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  PRE_WORKOUT
+  POST_WORKOUT
+  OTHER
+}
+
+enum DietPlanAssignmentStatus {
+  ACTIVE
+  ENDED
+  REMOVED
 }
 
 model Membership {
@@ -417,6 +453,90 @@ model TrainerAvailability {
   @@index([trainerId])
   @@index([trainerId, dayOfWeek])
   @@map("trainer_availabilities")
+}
+
+model TrainerClientLink {
+  id String @id @default(uuid()) @db.Uuid
+  trainerId String @map("trainer_id") @db.Uuid
+  memberId String @map("member_id") @db.Uuid
+  status TrainerClientLinkStatus @default(ACTIVE)
+  linkedAt DateTime @default(now()) @map("linked_at") @db.Timestamp(6)
+  endedAt DateTime? @map("ended_at") @db.Timestamp(6)
+  endReason String? @map("end_reason") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  trainer User @relation("TrainerClientLinkTrainer", fields: [trainerId], references: [id], onDelete: Restrict)
+  member User @relation("TrainerClientLinkMember", fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([trainerId, memberId, status])
+  @@index([memberId, status])
+  @@map("trainer_client_links")
+}
+
+model DietPlan {
+  id            String             @id @default(uuid()) @db.Uuid
+  trainerId     String             @map("trainer_id") @db.Uuid
+  title         String             @db.VarChar(255)
+  description   String?            @db.Text
+  durationDays  Int?               @map("duration_days")
+  calorieTarget Int?               @map("calorie_target")
+  status        DietPlanStatus     @default(DRAFT)
+  visibility    DietPlanVisibility @default(PRIVATE)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime?          @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  trainer       User               @relation("DietPlanTrainer", fields: [trainerId], references: [id], onDelete: Restrict)
+  meals         DietPlanMeal[]
+  assignments   DietPlanAssignment[]
+
+  @@index([trainerId, status])
+  @@index([trainerId, visibility])
+  @@index([status, visibility])
+  @@map("diet_plans")
+}
+
+model DietPlanMeal {
+  id            String       @id @default(uuid()) @db.Uuid
+  dietPlanId    String       @map("diet_plan_id") @db.Uuid
+  sequence      Int          @map("sequence")
+  mealType      DietMealType @map("meal_type")
+  mealTitle     String       @map("meal_title") @db.VarChar(255)
+  scheduledTime DateTime?    @map("scheduled_time") @db.Time
+  foodItemsText String?      @map("food_items_text") @db.Text
+  calories      Int          @map("calories")
+  proteinGrams  Decimal?     @map("protein_grams") @db.Decimal(6, 2)
+  carbsGrams    Decimal?     @map("carbs_grams") @db.Decimal(6, 2)
+  fatGrams      Decimal?     @map("fat_grams") @db.Decimal(6, 2)
+  notes         String?      @db.Text
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime?    @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  dietPlan      DietPlan     @relation(fields: [dietPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([dietPlanId, sequence])
+  @@index([dietPlanId, sequence])
+  @@index([mealType])
+  @@map("diet_plan_meals")
+}
+
+model DietPlanAssignment {
+  id            String                   @id @default(uuid()) @db.Uuid
+  dietPlanId    String                   @map("diet_plan_id") @db.Uuid
+  memberId      String                   @map("member_id") @db.Uuid
+  effectiveFrom DateTime                 @map("effective_from") @db.Date
+  effectiveTo   DateTime?                @map("effective_to") @db.Date
+  status        DietPlanAssignmentStatus @default(ACTIVE)
+  assignedAt    DateTime                 @default(now()) @map("assigned_at") @db.Timestamp(6)
+  endedAt       DateTime?                @map("ended_at") @db.Timestamp(6)
+  endReason     String?                  @map("end_reason") @db.Text
+
+  dietPlan      DietPlan                 @relation(fields: [dietPlanId], references: [id], onDelete: Cascade)
+  member        User                     @relation("DietPlanMember", fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([dietPlanId, status])
+  @@index([memberId, status])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("diet_plan_assignments")
 }
 
 model Feedback {

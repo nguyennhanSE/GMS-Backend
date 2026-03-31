@@ -23,6 +23,7 @@ import { ReportingModule } from './modules/reporting/reporting.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { WorkoutModule } from './modules/workout/workout.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
+import { DietModule } from './modules/diet/diet.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
     NotificationModule,
     WorkoutModule,
     ChatbotModule,
+    DietModule,
   ],
   controllers: [AppController],
   providers: [

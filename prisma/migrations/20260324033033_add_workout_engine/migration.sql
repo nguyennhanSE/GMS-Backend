@@ -1,0 +1,3 @@
+-- This migration was previously applied out of order in the database.
+-- Its effective schema changes are folded into 20260324090000_add_workout_engine
+-- so local migration replay remains deterministic.

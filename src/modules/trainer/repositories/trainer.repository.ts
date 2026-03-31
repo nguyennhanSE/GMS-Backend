@@ -5,10 +5,13 @@ import { toTrainerEntity, toTrainerEntityWithRelations, toPrismaTrainerCreateInp
 import { CreateTrainerDto } from "../dto/create-trainer.dto";
 import { TrainerFilterDto } from "../dto/trainer-filter.dto";
 import { ERoleName } from "../../roles/enums/role.enum";
-import { Prisma, TrainerAvailability } from "@prisma/client";
+import { Prisma, TrainerAvailability, TrainerClientLinkStatus } from "@prisma/client";
 import { IPaginate, PaginateOptions } from "../../../libs/models/paginate/pagimate.model";
 import { dayOfWeekEnumToInt, parseTimeString } from "../utils/day-of-week.util";
 import { TrainerAvailabilitySlotDto } from "../dto/trainer-availability.dto";
+import { UserEntity } from "src/modules/user/entities/user.entity";
+import { toUserEntityWithRelations } from "src/modules/user/mapper/user.mapper";
+import { TrainerClientLinkView, toTrainerClientLinkView } from "../mapper/trainer-client-link.mapper";
 
 @Injectable()
 export class TrainerRepository {
@@ -412,5 +415,143 @@ export class TrainerRepository {
         await this.prisma.trainerAvailability.delete({
             where: { id: slotId },
         });
+    }
+
+    /**
+     * Get a user with role relations and return null when the role does not match.
+     */
+    async getMemberByUserId(userId: string): Promise<UserEntity | null> {
+        const user = await this.findUserByIdWithRoles(userId);
+        if (!user || !this.hasRole(user, ERoleName.MEMBER)) {
+            return null;
+        }
+
+        return toUserEntityWithRelations(user);
+    }
+
+    async findTrainerClientLinkById(
+        linkId: string,
+    ): Promise<TrainerClientLinkView | null> {
+        const link = await this.prisma.trainerClientLink.findUnique({
+            where: { id: linkId },
+            include: this.trainerClientLinkInclude(),
+        });
+
+        return link ? toTrainerClientLinkView(link) : null;
+    }
+
+    async findActiveTrainerClientLink(
+        trainerId: string,
+        memberId: string,
+    ): Promise<TrainerClientLinkView | null> {
+        const link = await this.prisma.trainerClientLink.findFirst({
+            where: {
+                trainerId,
+                memberId,
+                status: TrainerClientLinkStatus.ACTIVE,
+            },
+            include: this.trainerClientLinkInclude(),
+        });
+
+        return link ? toTrainerClientLinkView(link) : null;
+    }
+
+    async listActiveTrainerClientLinks(
+        trainerId: string,
+    ): Promise<TrainerClientLinkView[]> {
+        const links = await this.prisma.trainerClientLink.findMany({
+            where: {
+                trainerId,
+                status: TrainerClientLinkStatus.ACTIVE,
+            },
+            orderBy: [{ linkedAt: 'desc' }],
+            include: this.trainerClientLinkInclude(),
+        });
+
+        return links.map((link) => toTrainerClientLinkView(link));
+    }
+
+    async createTrainerClientLink(
+        trainerId: string,
+        memberId: string,
+    ): Promise<TrainerClientLinkView> {
+        const link = await this.prisma.trainerClientLink.create({
+            data: {
+                trainerId,
+                memberId,
+            },
+            include: this.trainerClientLinkInclude(),
+        });
+
+        return toTrainerClientLinkView(link);
+    }
+
+    async endTrainerClientLink(
+        linkId: string,
+        endReason?: string,
+    ): Promise<TrainerClientLinkView> {
+        const link = await this.prisma.trainerClientLink.update({
+            where: { id: linkId },
+            data: {
+                status: TrainerClientLinkStatus.ENDED,
+                endedAt: new Date(),
+                endReason: endReason ?? null,
+            },
+            include: this.trainerClientLinkInclude(),
+        });
+
+        return toTrainerClientLinkView(link);
+    }
+
+    private async findUserByIdWithRoles(userId: string) {
+        if (!userId || userId.trim() === '') {
+            return null;
+        }
+
+        return this.prisma.user.findUnique({
+            where: { id: userId.trim() },
+            include: {
+                userRole: {
+                    include: {
+                        role: true,
+                    },
+                },
+                userMembership: {
+                    include: {
+                        membership: true,
+                    },
+                },
+            },
+        });
+    }
+
+    private hasRole(
+        user: {
+            userRole?: { role: { name: string } }[];
+        },
+        roleName: ERoleName,
+    ) {
+        return user.userRole?.some((userRole) => userRole.role.name === roleName) ?? false;
+    }
+
+    private trainerClientLinkInclude() {
+        return {
+            trainer: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                },
+            },
+            member: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                },
+            },
+        };
     }
 }

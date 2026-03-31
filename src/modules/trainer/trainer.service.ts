@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateTrainerDto } from './dto/create-trainer.dto';
 import { UpdateTrainerDto } from './dto/update-trainer.dto';
 import { TrainerRepository } from './repositories/trainer.repository';
@@ -7,7 +13,20 @@ import { IPaginate, PaginateOptions } from '../../libs/models/paginate/pagimate.
 import * as bcrypt from 'bcrypt';
 import { TrainerAvailabilitySlotDto } from './dto/trainer-availability.dto';
 import { TrainerFilterDto } from './dto/trainer-filter.dto';
-import { DayOfWeek, TrainerAvailability } from '@prisma/client';
+import {
+  DayOfWeek,
+  TrainerAvailability,
+  TrainerClientLinkStatus,
+} from '@prisma/client';
+import { RequestUser } from '../../libs/decorator/current-user.decorator';
+import { ERoleName } from '../roles/enums/role.enum';
+import {
+  CreateTrainerClientLinkDto,
+  EndTrainerClientLinkDto,
+} from './dto/trainer-client-link.dto';
+import {
+  TrainerClientLinkView,
+} from './mapper/trainer-client-link.mapper';
 import {
   dayOfWeekEnumToInt,
   formatTimeToString,
@@ -136,6 +155,66 @@ export class TrainerService {
     return this.trainerRepository.deleteAvailability(trainerId, slotId);
   }
 
+  async createTrainerClientLink(
+    trainerId: string,
+    dto: CreateTrainerClientLinkDto,
+  ): Promise<TrainerClientLinkView> {
+    await this.ensureTrainerExists(trainerId);
+    await this.ensureMemberExists(dto.memberId);
+
+    const existingLink = await this.trainerRepository.findActiveTrainerClientLink(
+      trainerId,
+      dto.memberId,
+    );
+    if (existingLink) {
+      throw new ConflictException(
+        'An active trainer-client link already exists for this member',
+      );
+    }
+
+    return this.trainerRepository.createTrainerClientLink(
+      trainerId,
+      dto.memberId,
+    );
+  }
+
+  async endTrainerClientLink(
+    trainerId: string,
+    linkId: string,
+    dto: EndTrainerClientLinkDto,
+  ): Promise<TrainerClientLinkView> {
+    await this.ensureTrainerExists(trainerId);
+
+    const link = await this.trainerRepository.findTrainerClientLinkById(linkId);
+    if (!link || link.trainerId !== trainerId) {
+      throw new NotFoundException(
+        `Trainer client link ${linkId} not found for trainer ${trainerId}`,
+      );
+    }
+
+    if (link.status !== TrainerClientLinkStatus.ACTIVE) {
+      throw new BadRequestException(
+        'Only active trainer-client links can be ended',
+      );
+    }
+
+    return this.trainerRepository.endTrainerClientLink(linkId, dto.endReason);
+  }
+
+  async listTrainerClientLinks(
+    user: RequestUser,
+  ): Promise<TrainerClientLinkView[]> {
+    await this.ensureTrainerExists(user.sub);
+    return this.trainerRepository.listActiveTrainerClientLinks(user.sub);
+  }
+
+  async findActiveTrainerClientLink(
+    trainerId: string,
+    memberId: string,
+  ): Promise<TrainerClientLinkView | null> {
+    return this.trainerRepository.findActiveTrainerClientLink(trainerId, memberId);
+  }
+
   /**
    * Check if trainer is within working hours for a given day and time range.
    * This is Layer 1 ONLY — working hours check.
@@ -185,5 +264,19 @@ export class TrainerService {
       withinHours: false,
       reason: `Trainer works ${slotsInfo} on ${dayOfWeek}, requested ${formatTimeToString(startTime)}-${formatTimeToString(endTime)}`,
     };
+  }
+
+  private async ensureTrainerExists(trainerId: string): Promise<void> {
+    const trainer = await this.trainerRepository.getTrainerByUserId(trainerId);
+    if (!trainer) {
+      throw new NotFoundException(`Trainer with id ${trainerId} not found`);
+    }
+  }
+
+  private async ensureMemberExists(memberId: string): Promise<void> {
+    const member = await this.trainerRepository.getMemberByUserId(memberId);
+    if (!member) {
+      throw new NotFoundException(`Member with id ${memberId} not found`);
+    }
   }
 }

@@ -25,6 +25,9 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
 import { Prisma } from '@prisma/client';
 import { BOOKING_STATUS } from './constants/booking-status.constants';
+import { AppCacheService } from '../../libs/cache/cache.service';
+import { buildClassScheduleInvalidationTags } from '../class-schedule/class-schedule.cache';
+import { buildTrainerAvailabilityTag } from '../trainer/trainer.cache';
 
 @Injectable()
 export class ClassBookingService {
@@ -36,6 +39,7 @@ export class ClassBookingService {
     private readonly scheduleExceptionService: ScheduleExceptionService,
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
+    private readonly appCacheService: AppCacheService,
   ) {}
 
   /**
@@ -388,6 +392,8 @@ export class ClassBookingService {
       },
     );
 
+    await this.invalidateAvailabilityForScheduleIds(wantedSchedules);
+
     return createdBookings;
   }
 
@@ -443,7 +449,15 @@ export class ClassBookingService {
     const existingBooking = await this.findOne(id);
 
     // Only status updates are allowed (DTO enforces this)
-    return this.classBookingRepository.update(id, updateClassBookingDto);
+    const updated = await this.classBookingRepository.update(
+      id,
+      updateClassBookingDto,
+    );
+    await this.invalidateAvailabilityForScheduleIds([
+      existingBooking.classScheduleId,
+    ]);
+
+    return updated;
   }
 
   /**
@@ -472,7 +486,12 @@ export class ClassBookingService {
       throw new BadRequestException('Cannot cancel an attended booking');
     }
 
-    return this.classBookingRepository.update(id, { status: 'cancelled' });
+    const updated = await this.classBookingRepository.update(id, {
+      status: 'cancelled',
+    });
+    await this.invalidateAvailabilityForScheduleIds([booking.classScheduleId]);
+
+    return updated;
   }
 
   /**
@@ -480,10 +499,11 @@ export class ClassBookingService {
    */
   async remove(id: string): Promise<{ message: string }> {
     // Check if class booking exists
-    await this.findOne(id);
+    const existing = await this.findOne(id);
 
     // Delete class booking
     await this.classBookingRepository.delete(id);
+    await this.invalidateAvailabilityForScheduleIds([existing.classScheduleId]);
 
     return { message: `Class booking ${id} deleted successfully` };
   }
@@ -547,6 +567,7 @@ export class ClassBookingService {
     const updated = await this.classBookingRepository.update(bookingId, {
       status: BOOKING_STATUS.CANCELLED,
     });
+    await this.invalidateAvailabilityForScheduleIds([booking.classScheduleId]);
 
     this.logger.log(
       `Booking ${bookingId} cancelled by payment (reason: ${reason})`,
@@ -602,5 +623,41 @@ export class ClassBookingService {
     }
 
     return { checkoutUrl: result.checkoutUrl };
+  }
+
+  private async invalidateAvailabilityForScheduleIds(
+    scheduleIds: string[],
+  ): Promise<void> {
+    const uniqueScheduleIds = [...new Set(scheduleIds.filter(Boolean))];
+    if (uniqueScheduleIds.length === 0) {
+      return;
+    }
+
+    const schedules = await this.prisma.classSchedule.findMany({
+      where: {
+        id: {
+          in: uniqueScheduleIds,
+        },
+      },
+      select: {
+        id: true,
+        trainerId: true,
+      },
+    });
+
+    const tags = new Set<string>();
+
+    for (const schedule of schedules) {
+      for (const tag of buildClassScheduleInvalidationTags({
+        scheduleId: schedule.id,
+        trainerIds: [schedule.trainerId],
+      })) {
+        tags.add(tag);
+      }
+
+      tags.add(buildTrainerAvailabilityTag(schedule.trainerId));
+    }
+
+    await this.appCacheService.invalidateTags([...tags]);
   }
 }

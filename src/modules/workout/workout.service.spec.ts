@@ -13,6 +13,7 @@ import {
 } from './dto/exercise-set-log.dto';
 import { CreateWorkoutPlanDto, WorkoutPlanStatusDto, WorkoutPlanVisibilityDto } from './dto/workout-plan.dto';
 import { WorkoutService } from './workout.service';
+import { AppCacheService } from '../../libs/cache/cache.service';
 
 describe('WorkoutService', () => {
   let service: WorkoutService;
@@ -41,6 +42,10 @@ describe('WorkoutService', () => {
       create: jest.Mock;
     };
     $transaction: jest.Mock;
+  };
+  let appCacheService: {
+    remember: jest.Mock;
+    invalidateTags: jest.Mock;
   };
 
   const trainerUser: RequestUser = {
@@ -92,7 +97,65 @@ describe('WorkoutService', () => {
       $transaction: jest.fn(),
     };
 
-    service = new WorkoutService(prisma as unknown as PrismaService);
+    appCacheService = {
+      remember: jest.fn(),
+      invalidateTags: jest.fn().mockResolvedValue(undefined),
+    };
+
+    service = new WorkoutService(
+      prisma as unknown as PrismaService,
+      appCacheService as unknown as AppCacheService,
+    );
+  });
+
+  it('loads exercises through the shared cache service', async () => {
+    const exercises = [
+      {
+        id: 'exercise-1',
+        name: 'Back Squat',
+        description: null,
+        category: 'Strength',
+        equipmentRequired: 'Barbell',
+        createdAt: new Date('2026-03-24T00:00:00.000Z'),
+        updatedAt: null,
+      },
+    ];
+
+    prisma.exercise.findMany.mockResolvedValue(exercises);
+    appCacheService.remember.mockImplementation(
+      async (_key: string, loader: () => Promise<unknown>) => loader(),
+    );
+
+    const result = await service.listExercises();
+
+    expect(appCacheService.remember).toHaveBeenCalled();
+    expect(result).toEqual(exercises);
+  });
+
+  it('invalidates the exercise catalog cache after creating an exercise', async () => {
+    const createdExercise = {
+      id: 'exercise-1',
+      name: 'Back Squat',
+      description: null,
+      category: 'Strength',
+      equipmentRequired: 'Barbell',
+      createdAt: new Date('2026-03-24T00:00:00.000Z'),
+      updatedAt: null,
+    };
+
+    prisma.exercise.create.mockResolvedValue(createdExercise);
+
+    const result = await service.createExercise({
+      name: 'Back Squat',
+      category: 'Strength',
+      equipmentRequired: 'Barbell',
+    } as any);
+
+    expect(prisma.exercise.create).toHaveBeenCalled();
+    expect(appCacheService.invalidateTags).toHaveBeenCalledWith([
+      'workout:exercises',
+    ]);
+    expect(result).toEqual(createdExercise);
   });
 
   it('creates a workout plan with nested items and deduplicated assignments', async () => {

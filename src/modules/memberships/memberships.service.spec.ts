@@ -3,11 +3,16 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { MembershipsService } from './memberships.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
+import { AppCacheService } from '../../libs/cache/cache.service';
 
 describe('MembershipsService', () => {
   let service: MembershipsService;
   let prisma: jest.Mocked<any>;
   let paymentService: jest.Mocked<any>;
+  let appCacheService: {
+    remember: jest.Mock;
+    invalidateTags: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -31,11 +36,17 @@ describe('MembershipsService', () => {
       createCheckout: jest.fn(),
     };
 
+    appCacheService = {
+      remember: jest.fn((_key, loader) => loader()),
+      invalidateTags: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MembershipsService,
         { provide: PrismaService, useValue: prisma },
         { provide: PaymentService, useValue: paymentService },
+        { provide: AppCacheService, useValue: appCacheService },
       ],
     }).compile();
 
@@ -71,6 +82,13 @@ describe('MembershipsService', () => {
 
       expect(result).toEqual(mockTier);
       expect(prisma.membership.create).toHaveBeenCalled();
+      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          'membership:list',
+          'membership:detail',
+          'membership:id:tier-1',
+        ]),
+      );
     });
 
     it('findAll should return all tiers sorted by minPrice', async () => {
@@ -82,6 +100,14 @@ describe('MembershipsService', () => {
       expect(prisma.membership.findMany).toHaveBeenCalledWith({
         orderBy: { minPrice: 'asc' },
       });
+      expect(appCacheService.remember).toHaveBeenCalledWith(
+        'gms:membership:list',
+        expect.any(Function),
+        expect.objectContaining({
+          ttlSeconds: 900,
+          tags: ['membership:list'],
+        }),
+      );
     });
 
     it('findOne should return a tier by id', async () => {
@@ -90,6 +116,14 @@ describe('MembershipsService', () => {
       const result = await service.findOne('tier-1');
 
       expect(result).toEqual(mockTier);
+      expect(appCacheService.remember).toHaveBeenCalledWith(
+        'gms:membership:detail:tier-1',
+        expect.any(Function),
+        expect.objectContaining({
+          ttlSeconds: 900,
+          tags: ['membership:detail', 'membership:id:tier-1'],
+        }),
+      );
     });
 
     it('findOne should throw NotFoundException if not found', async () => {
@@ -120,6 +154,13 @@ describe('MembershipsService', () => {
       expect(prisma.membership.delete).toHaveBeenCalledWith({
         where: { id: 'tier-1' },
       });
+      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          'membership:list',
+          'membership:detail',
+          'membership:id:tier-1',
+        ]),
+      );
     });
   });
 

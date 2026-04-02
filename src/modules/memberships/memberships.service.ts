@@ -8,6 +8,15 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
+import { AppCacheService } from '../../libs/cache/cache.service';
+import {
+  buildMembershipDetailKey,
+  buildMembershipInvalidationTags,
+  buildMembershipListKey,
+  membershipDetailTags,
+  membershipListTags,
+  MEMBERSHIP_TTL_SECONDS,
+} from './memberships.cache';
 
 @Injectable()
 export class MembershipsService {
@@ -16,22 +25,44 @@ export class MembershipsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
+    private readonly appCacheService: AppCacheService,
   ) {}
 
   async create(dto: CreateMembershipDto) {
-    return this.prisma.membership.create({ data: dto });
+    const created = await this.prisma.membership.create({ data: dto });
+    await this.appCacheService.invalidateTags(
+      buildMembershipInvalidationTags(created.id),
+    );
+
+    return created;
   }
 
   async findAll() {
-    return this.prisma.membership.findMany({
-      orderBy: { minPrice: 'asc' },
-    });
+    return this.appCacheService.remember(
+      buildMembershipListKey(),
+      () =>
+        this.prisma.membership.findMany({
+          orderBy: { minPrice: 'asc' },
+        }),
+      {
+        ttlSeconds: MEMBERSHIP_TTL_SECONDS,
+        tags: membershipListTags(),
+      },
+    );
   }
 
   async findOne(id: string) {
-    const membership = await this.prisma.membership.findUnique({
-      where: { id },
-    });
+    const membership = await this.appCacheService.remember(
+      buildMembershipDetailKey(id),
+      () =>
+        this.prisma.membership.findUnique({
+          where: { id },
+        }),
+      {
+        ttlSeconds: MEMBERSHIP_TTL_SECONDS,
+        tags: membershipDetailTags(id),
+      },
+    );
     if (!membership) {
       throw new NotFoundException(`Membership tier ${id} not found`);
     }
@@ -60,10 +91,15 @@ export class MembershipsService {
 
   async update(id: string, dto: UpdateMembershipDto) {
     await this.findOne(id);
-    return this.prisma.membership.update({
+    const updated = await this.prisma.membership.update({
       where: { id },
       data: dto,
     });
+    await this.appCacheService.invalidateTags(
+      buildMembershipInvalidationTags(id),
+    );
+
+    return updated;
   }
 
   async remove(id: string) {
@@ -80,6 +116,9 @@ export class MembershipsService {
     }
 
     await this.prisma.membership.delete({ where: { id } });
+    await this.appCacheService.invalidateTags(
+      buildMembershipInvalidationTags(id),
+    );
     return { message: `Membership tier ${id} deleted` };
   }
 

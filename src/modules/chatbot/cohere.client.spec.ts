@@ -85,6 +85,38 @@ describe('CohereClient', () => {
     expect(prompt).toContain('message-11');
   });
 
+  it('parses fenced JSON responses from Cohere', async () => {
+    config.CHATBOT_COHERE_ENABLED = true;
+    config.COHERE_API_KEY = 'cohere-test-key';
+
+    httpService.post.mockReturnValue(
+      of({
+        data: {
+          message: {
+            content: [
+              {
+                text: `\`\`\`json
+{"intentKey":"${CHATBOT_INTENTS.faqLocation}","answer":"The gym is on test street."}
+\`\`\``,
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    const result = await client.classifyMessage(
+      'Where is the gym?',
+      [],
+      { [CHATBOT_INTENTS.faqLocation]: 'location help' },
+    );
+
+    expect(result).toEqual({
+      intentKey: CHATBOT_INTENTS.faqLocation,
+      answer: 'The gym is on test street.',
+    });
+  });
+
   it('returns null when Cohere responds with invalid data', async () => {
     config.CHATBOT_COHERE_ENABLED = true;
     config.COHERE_API_KEY = 'cohere-test-key';

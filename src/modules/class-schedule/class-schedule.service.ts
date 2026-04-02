@@ -16,12 +16,28 @@ import {
 } from '../../libs/models/paginate/pagimate.model';
 import { DayOfWeek } from '@prisma/client';
 import { TrainerService } from '../trainer/trainer.service';
+import { AppCacheService } from '../../libs/cache/cache.service';
+import {
+  buildClassScheduleDayKey,
+  buildClassScheduleDetailKey,
+  buildClassScheduleInvalidationTags,
+  buildClassScheduleListKey,
+  buildClassScheduleTrainerKey,
+  classScheduleDayTags,
+  classScheduleDetailTags,
+  CLASS_SCHEDULE_DATE_AWARE_TTL_SECONDS,
+  CLASS_SCHEDULE_LIST_TTL_SECONDS,
+  classScheduleListTags,
+  classScheduleTrainerTags,
+} from './class-schedule.cache';
+import { buildTrainerAvailabilityTag } from '../trainer/trainer.cache';
 
 @Injectable()
 export class ClassScheduleService {
   constructor(
     private readonly classScheduleRepository: ClassScheduleRepository,
     private readonly trainerService: TrainerService,
+    private readonly appCacheService: AppCacheService,
   ) {}
 
   /**
@@ -80,7 +96,16 @@ export class ClassScheduleService {
       );
     }
 
-    return this.classScheduleRepository.create(createClassScheduleDto);
+    const created = await this.classScheduleRepository.create(createClassScheduleDto);
+    await this.appCacheService.invalidateTags([
+      ...buildClassScheduleInvalidationTags({
+        scheduleId: created.id,
+        trainerIds: [createClassScheduleDto.trainerId],
+      }),
+      buildTrainerAvailabilityTag(createClassScheduleDto.trainerId),
+    ]);
+
+    return created;
   }
 
   /**
@@ -92,13 +117,31 @@ export class ClassScheduleService {
     options: { counted?: boolean },
     targetDate?: Date,
   ): Promise<IPaginate<ClassScheduleEntity>> {
-    return this.classScheduleRepository.getPaginate(
+    const key = buildClassScheduleListKey(
+      paginateRequest,
       filter,
-      {
-        ...paginateRequest,
-        counted: options.counted,
-      },
+      options.counted,
       targetDate,
+    );
+    const ttlSeconds = targetDate
+      ? CLASS_SCHEDULE_DATE_AWARE_TTL_SECONDS
+      : CLASS_SCHEDULE_LIST_TTL_SECONDS;
+
+    return this.appCacheService.remember(
+      key,
+      () =>
+        this.classScheduleRepository.getPaginate(
+          filter,
+          {
+            ...paginateRequest,
+            counted: options.counted,
+          },
+          targetDate,
+        ),
+      {
+        ttlSeconds,
+        tags: classScheduleListTags(),
+      },
     );
   }
 
@@ -106,10 +149,21 @@ export class ClassScheduleService {
    * Find one class schedule by id with optional per-date availability
    */
   async findOne(id: string, targetDate?: Date): Promise<ClassScheduleEntity> {
-    const classSchedule = await this.classScheduleRepository.getById(
-      id,
-      targetDate,
+    const classSchedule = await this.appCacheService.remember(
+      buildClassScheduleDetailKey(id, targetDate),
+      () =>
+        this.classScheduleRepository.getById(
+          id,
+          targetDate,
+        ),
+      {
+        ttlSeconds: targetDate
+          ? CLASS_SCHEDULE_DATE_AWARE_TTL_SECONDS
+          : CLASS_SCHEDULE_LIST_TTL_SECONDS,
+        tags: classScheduleDetailTags(id),
+      },
     );
+
     if (!classSchedule) {
       throw new NotFoundException(`Class schedule with id ${id} not found`);
     }
@@ -188,7 +242,20 @@ export class ClassScheduleService {
       }
     }
 
-    return this.classScheduleRepository.update(id, updateClassScheduleDto);
+    const updated = await this.classScheduleRepository.update(
+      id,
+      updateClassScheduleDto,
+    );
+    await this.appCacheService.invalidateTags([
+      ...buildClassScheduleInvalidationTags({
+        scheduleId: id,
+        trainerIds: [...new Set([existing.trainerId, trainerId].filter(Boolean))],
+      }),
+      buildTrainerAvailabilityTag(existing.trainerId),
+      buildTrainerAvailabilityTag(trainerId),
+    ]);
+
+    return updated;
   }
 
   /**
@@ -196,10 +263,17 @@ export class ClassScheduleService {
    */
   async remove(id: string): Promise<{ message: string }> {
     // Check if class schedule exists
-    await this.findOne(id);
+    const existing = await this.findOne(id);
 
     // Delete class schedule
     await this.classScheduleRepository.delete(id);
+    await this.appCacheService.invalidateTags([
+      ...buildClassScheduleInvalidationTags({
+        scheduleId: id,
+        trainerIds: [existing.trainerId],
+      }),
+      buildTrainerAvailabilityTag(existing.trainerId),
+    ]);
 
     return { message: `Class schedule ${id} deleted successfully` };
   }
@@ -208,14 +282,28 @@ export class ClassScheduleService {
    * Get schedules by day of week (for weekly schedule views)
    */
   async findByDayOfWeek(dayOfWeek: DayOfWeek): Promise<ClassScheduleEntity[]> {
-    return this.classScheduleRepository.getByDayOfWeek(dayOfWeek);
+    return this.appCacheService.remember(
+      buildClassScheduleDayKey(dayOfWeek),
+      () => this.classScheduleRepository.getByDayOfWeek(dayOfWeek),
+      {
+        ttlSeconds: CLASS_SCHEDULE_LIST_TTL_SECONDS,
+        tags: classScheduleDayTags(),
+      },
+    );
   }
 
   /**
    * Get schedules by trainer (for trainer dashboards)
    */
   async findByTrainerId(trainerId: string): Promise<ClassScheduleEntity[]> {
-    return this.classScheduleRepository.getByTrainerId(trainerId);
+    return this.appCacheService.remember(
+      buildClassScheduleTrainerKey(trainerId),
+      () => this.classScheduleRepository.getByTrainerId(trainerId),
+      {
+        ttlSeconds: CLASS_SCHEDULE_LIST_TTL_SECONDS,
+        tags: classScheduleTrainerTags(trainerId),
+      },
+    );
   }
 
   /**

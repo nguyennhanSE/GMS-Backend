@@ -75,7 +75,7 @@ export class CohereClient {
         return null;
       }
 
-      const parsed = JSON.parse(rawText) as Partial<CohereClassification>;
+      const parsed = this.parseClassification(rawText);
 
       if (!parsed.intentKey || !(parsed.intentKey in intentCatalog)) {
         return null;
@@ -88,6 +88,20 @@ export class CohereClient {
     } catch (error) {
       this.logger.warn('Cohere classification failed', error as Error);
       return null;
+    }
+  }
+
+  private parseClassification(rawText: string): Partial<CohereClassification> {
+    try {
+      return JSON.parse(rawText) as Partial<CohereClassification>;
+    } catch {
+      const normalized = rawText
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
+      return JSON.parse(normalized) as Partial<CohereClassification>;
     }
   }
 

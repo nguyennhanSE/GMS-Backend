@@ -74,4 +74,15 @@ export const config = {
 
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL ?? 'amqp://localhost:5672',
+
+  // Redis Cache Configuration
+  REDIS_ENABLED:
+    process.env.REDIS_ENABLED === 'true' ||
+    process.env.REDIS_ENABLED === '1',
+  REDIS_HOST: process.env.REDIS_HOST ?? 'localhost',
+  REDIS_PORT: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+  REDIS_USERNAME: process.env.REDIS_USERNAME ?? '',
+  REDIS_PASSWORD: process.env.REDIS_PASSWORD ?? '',
+  REDIS_DB: parseInt(process.env.REDIS_DB ?? '0', 10),
+  REDIS_TTL_SECONDS: parseInt(process.env.REDIS_TTL_SECONDS ?? '300', 10),
 };

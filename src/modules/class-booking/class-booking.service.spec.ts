@@ -9,11 +9,14 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { PaymentService } from '../payment/payment.service';
+import { AppCacheService } from '../../libs/cache/cache.service';
 
 describe('ClassBookingService', () => {
   let service: ClassBookingService;
   let prismaService: jest.Mocked<PrismaService>;
   let classBookingRepository: jest.Mocked<ClassBookingRepository>;
+  let appCacheService: jest.Mocked<Pick<AppCacheService, 'invalidateTags'>>;
 
   // Mock schedule with new schema structure
   const mockSchedule = {
@@ -49,16 +52,22 @@ describe('ClassBookingService', () => {
   };
 
   beforeEach(async () => {
+    appCacheService = {
+      invalidateTags: jest.fn(),
+    };
+
     const mockPrismaService = {
       $transaction: jest.fn(),
       $queryRaw: jest.fn(),
       classSchedule: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
       },
       classBooking: {
         findFirst: jest.fn(),
         count: jest.fn(),
         create: jest.fn(),
+        upsert: jest.fn(),
       },
       trainerAvailability: {
         findMany: jest.fn(),
@@ -83,6 +92,10 @@ describe('ClassBookingService', () => {
       isClassCancelledOnDate: jest.fn().mockResolvedValue(false),
     };
 
+    const mockPaymentService = {
+      createCheckout: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ClassBookingService,
@@ -93,6 +106,8 @@ describe('ClassBookingService', () => {
           provide: ScheduleExceptionService,
           useValue: mockScheduleExceptionService,
         },
+        { provide: PaymentService, useValue: mockPaymentService },
+        { provide: AppCacheService, useValue: appCacheService },
       ],
     }).compile();
 
@@ -124,7 +139,7 @@ describe('ClassBookingService', () => {
             findMany: jest.fn(),
           },
         };
-        return callback(mockTx);
+        return callback(mockTx as any);
       });
 
       await expect(
@@ -155,7 +170,7 @@ describe('ClassBookingService', () => {
             findMany: jest.fn(),
           },
         };
-        return callback(mockTx);
+        return callback(mockTx as any);
       });
 
       await expect(
@@ -184,7 +199,7 @@ describe('ClassBookingService', () => {
             findMany: jest.fn().mockResolvedValue([]),
           },
         };
-        return callback(mockTx);
+        return callback(mockTx as any);
       });
 
       await expect(
@@ -213,7 +228,7 @@ describe('ClassBookingService', () => {
             findMany: jest.fn().mockResolvedValue([]),
           },
         };
-        return callback(mockTx);
+        return callback(mockTx as any);
       });
 
       await expect(
@@ -242,7 +257,7 @@ describe('ClassBookingService', () => {
             findMany: jest.fn(),
           },
         };
-        return callback(mockTx);
+        return callback(mockTx as any);
       });
 
       await expect(
@@ -274,7 +289,7 @@ describe('ClassBookingService', () => {
             findMany: jest.fn(),
           },
         };
-        return callback(mockTx);
+        return callback(mockTx as any);
       });
 
       // 2030-01-08 is a Tuesday (UTC)
@@ -301,7 +316,7 @@ describe('ClassBookingService', () => {
           classBooking: {
             findFirst: jest.fn().mockResolvedValue(null),
             count: jest.fn().mockResolvedValue(0),
-            create: jest.fn().mockResolvedValue({
+            upsert: jest.fn().mockResolvedValue({
               id: 'new-booking',
               userId: 'user-1',
               classScheduleId: 'schedule-1',
@@ -321,8 +336,11 @@ describe('ClassBookingService', () => {
             ]),
           },
         };
-        return callback(mockTx);
+        return callback(mockTx as any);
       });
+      (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
+        { id: 'schedule-1', trainerId: 'trainer-1' },
+      ] as any);
 
       // 2030-01-07 is a Monday (UTC)
       const result = await service.create({
@@ -334,6 +352,13 @@ describe('ClassBookingService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].status).toBe('pending');
+      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          'class-schedule:id:schedule-1',
+          'class-schedule:trainer:trainer-1',
+          'trainer:availability:trainer-1',
+        ]),
+      );
     });
   });
 
@@ -362,6 +387,9 @@ describe('ClassBookingService', () => {
         ...mockBooking,
         status: 'cancelled',
       } as any);
+      (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
+        { id: 'schedule-1', trainerId: 'trainer-1' },
+      ] as any);
 
       const result = await service.cancel('booking-1', 'user-1', false);
 
@@ -369,6 +397,12 @@ describe('ClassBookingService', () => {
       expect(classBookingRepository.update).toHaveBeenCalledWith('booking-1', {
         status: 'cancelled',
       });
+      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          'class-schedule:id:schedule-1',
+          'trainer:availability:trainer-1',
+        ]),
+      );
     });
 
     it('should throw ForbiddenException when non-owner tries to cancel', async () => {
@@ -385,6 +419,9 @@ describe('ClassBookingService', () => {
         ...mockBooking,
         status: 'cancelled',
       } as any);
+      (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
+        { id: 'schedule-1', trainerId: 'trainer-1' },
+      ] as any);
 
       const result = await service.cancel('booking-1', 'admin-user', true);
 
@@ -449,10 +486,19 @@ describe('ClassBookingService', () => {
         ...mockBooking,
         status: 'confirmed',
       } as any);
+      (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
+        { id: 'schedule-1', trainerId: 'trainer-1' },
+      ] as any);
 
       const result = await service.update('booking-1', { status: 'confirmed' });
 
       expect(result.status).toBe('confirmed');
+      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          'class-schedule:id:schedule-1',
+          'trainer:availability:trainer-1',
+        ]),
+      );
     });
   });
 
@@ -460,6 +506,9 @@ describe('ClassBookingService', () => {
     it('should delete booking', async () => {
       classBookingRepository.getById.mockResolvedValue(mockBooking as any);
       classBookingRepository.delete.mockResolvedValue();
+      (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
+        { id: 'schedule-1', trainerId: 'trainer-1' },
+      ] as any);
 
       const result = await service.remove('booking-1');
 
@@ -467,6 +516,12 @@ describe('ClassBookingService', () => {
         message: 'Class booking booking-1 deleted successfully',
       });
       expect(classBookingRepository.delete).toHaveBeenCalledWith('booking-1');
+      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          'class-schedule:id:schedule-1',
+          'trainer:availability:trainer-1',
+        ]),
+      );
     });
   });
 });

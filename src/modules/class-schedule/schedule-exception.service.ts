@@ -20,6 +20,9 @@ import {
   UpdateScheduleExceptionDto,
   ExceptionTypeDto,
 } from './dto/schedule-exception.dto';
+import { AppCacheService } from '../../libs/cache/cache.service';
+import { buildClassScheduleInvalidationTags } from './class-schedule.cache';
+import { buildTrainerAvailabilityTag } from '../trainer/trainer.cache';
 
 @Injectable()
 export class ScheduleExceptionService {
@@ -30,6 +33,7 @@ export class ScheduleExceptionService {
     private readonly scheduleRepository: ClassScheduleRepository,
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly appCacheService: AppCacheService,
   ) {}
 
   /**
@@ -98,6 +102,14 @@ export class ScheduleExceptionService {
       );
     }
 
+    await this.appCacheService.invalidateTags([
+      ...buildClassScheduleInvalidationTags({
+        scheduleId,
+        trainerIds: [schedule.trainerId],
+      }),
+      buildTrainerAvailabilityTag(schedule.trainerId),
+    ]);
+
     return createdException;
   }
 
@@ -136,6 +148,12 @@ export class ScheduleExceptionService {
   ): Promise<ScheduleExceptionEntity> {
     // Verify exception exists
     const existing = await this.findById(id);
+    const schedule = await this.scheduleRepository.getById(existing.scheduleId);
+    if (!schedule) {
+      throw new NotFoundException(
+        `Schedule with ID ${existing.scheduleId} not found`,
+      );
+    }
 
     // Validate RESCHEDULED type requires new times
     const newType = dto.type ?? existing.type;
@@ -165,12 +183,22 @@ export class ScheduleExceptionService {
       newEndTime = dto.newEndTime ? this.parseTimeString(dto.newEndTime) : null;
     }
 
-    return this.exceptionRepository.update(id, {
+    const updated = await this.exceptionRepository.update(id, {
       type: dto.type as ExceptionType | undefined,
       reason: dto.reason,
       newStartTime,
       newEndTime,
     });
+
+    await this.appCacheService.invalidateTags([
+      ...buildClassScheduleInvalidationTags({
+        scheduleId: existing.scheduleId,
+        trainerIds: [schedule.trainerId],
+      }),
+      buildTrainerAvailabilityTag(schedule.trainerId),
+    ]);
+
+    return updated;
   }
 
   /**
@@ -178,9 +206,22 @@ export class ScheduleExceptionService {
    */
   async remove(id: string): Promise<{ message: string }> {
     // Verify exception exists
-    await this.findById(id);
+    const existing = await this.findById(id);
+    const schedule = await this.scheduleRepository.getById(existing.scheduleId);
+    if (!schedule) {
+      throw new NotFoundException(
+        `Schedule with ID ${existing.scheduleId} not found`,
+      );
+    }
 
     await this.exceptionRepository.delete(id);
+    await this.appCacheService.invalidateTags([
+      ...buildClassScheduleInvalidationTags({
+        scheduleId: existing.scheduleId,
+        trainerIds: [schedule.trainerId],
+      }),
+      buildTrainerAvailabilityTag(schedule.trainerId),
+    ]);
     return { message: `Exception ${id} deleted successfully` };
   }
 

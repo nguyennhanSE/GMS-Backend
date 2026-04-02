@@ -27,6 +27,12 @@ import {
   CreateWorkoutSessionDto,
 } from './dto/workout-session.dto';
 import { CreateExerciseSetLogDto } from './dto/exercise-set-log.dto';
+import { AppCacheService } from '../../libs/cache/cache.service';
+import {
+  buildWorkoutExercisesKey,
+  workoutExerciseTags,
+  WORKOUT_EXERCISES_TTL_SECONDS,
+} from './workout.cache';
 
 type ExerciseView = {
   id: string;
@@ -121,14 +127,26 @@ type WorkoutSessionView = {
 
 @Injectable()
 export class WorkoutService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appCacheService: AppCacheService,
+  ) {}
 
   async listExercises(): Promise<ExerciseView[]> {
-    const exercises = await this.prisma.exercise.findMany({
-      orderBy: [{ category: 'asc' }, { name: 'asc' }],
-    });
+    return this.appCacheService.remember(
+      buildWorkoutExercisesKey(),
+      async () => {
+        const exercises = await this.prisma.exercise.findMany({
+          orderBy: [{ category: 'asc' }, { name: 'asc' }],
+        });
 
-    return exercises.map((exercise) => this.mapExercise(exercise));
+        return exercises.map((exercise) => this.mapExercise(exercise));
+      },
+      {
+        ttlSeconds: WORKOUT_EXERCISES_TTL_SECONDS,
+        tags: workoutExerciseTags(),
+      },
+    );
   }
 
   async createExercise(dto: CreateExerciseDto): Promise<ExerciseView> {
@@ -136,6 +154,7 @@ export class WorkoutService {
       const exercise = await this.prisma.exercise.create({
         data: dto,
       });
+      await this.appCacheService.invalidateTags(workoutExerciseTags());
       return this.mapExercise(exercise);
     } catch (error) {
       this.handlePrismaError(error, 'Exercise');
@@ -150,6 +169,7 @@ export class WorkoutService {
         where: { id },
         data: dto,
       });
+      await this.appCacheService.invalidateTags(workoutExerciseTags());
       return this.mapExercise(exercise);
     } catch (error) {
       this.handlePrismaError(error, 'Exercise');
@@ -163,6 +183,7 @@ export class WorkoutService {
       await this.prisma.exercise.delete({
         where: { id },
       });
+      await this.appCacheService.invalidateTags(workoutExerciseTags());
       return { message: `Exercise ${id} deleted successfully` };
     } catch (error) {
       if (this.isForeignKeyConflict(error)) {

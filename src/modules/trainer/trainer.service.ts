@@ -31,10 +31,25 @@ import {
   dayOfWeekEnumToInt,
   formatTimeToString,
 } from './utils/day-of-week.util';
+import { AppCacheService } from '../../libs/cache/cache.service';
+import {
+  buildTrainerAvailabilityKey,
+  buildTrainerInvalidationTags,
+  buildTrainerListKey,
+  buildTrainerDetailKey,
+  TRAINER_AVAILABILITY_TTL_SECONDS,
+  TRAINER_LIST_TTL_SECONDS,
+  trainerAvailabilityTags,
+  trainerDetailTags,
+  trainerListTags,
+} from './trainer.cache';
 
 @Injectable()
 export class TrainerService {
-  constructor(private readonly trainerRepository: TrainerRepository) {}
+  constructor(
+    private readonly trainerRepository: TrainerRepository,
+    private readonly appCacheService: AppCacheService,
+  ) {}
 
   /**
    * Create a new trainer
@@ -49,10 +64,19 @@ export class TrainerService {
     // Hash the admin-provided password
     const password = await bcrypt.hash(createTrainerDto.password, 10);
 
-    return this.trainerRepository.createTrainer({
+    const created = await this.trainerRepository.createTrainer({
       ...createTrainerDto,
       password,
     });
+    await this.appCacheService.invalidateTags(
+      buildTrainerInvalidationTags({
+        trainerId: created.id,
+        includeList: true,
+        includeAvailability: true,
+      }),
+    );
+
+    return created;
   }
 
   /**
@@ -63,17 +87,32 @@ export class TrainerService {
     filter: TrainerFilterDto,
     options: { counted?: boolean }
   ): Promise<IPaginate<TrainerEntity>> {
-    return this.trainerRepository.getTrainerPaginate(filter, {
-      ...paginateRequest,
-      counted: options.counted,
-    });
+    return this.appCacheService.remember(
+      buildTrainerListKey(paginateRequest, filter, options.counted),
+      () =>
+        this.trainerRepository.getTrainerPaginate(filter, {
+          ...paginateRequest,
+          counted: options.counted,
+        }),
+      {
+        ttlSeconds: TRAINER_LIST_TTL_SECONDS,
+        tags: trainerListTags(),
+      },
+    );
   }
 
   /**
    * Find one trainer by id
    */
   async findOne(id: string): Promise<TrainerEntity> {
-    const trainer = await this.trainerRepository.getTrainerByUserId(id);
+    const trainer = await this.appCacheService.remember(
+      buildTrainerDetailKey(id),
+      () => this.trainerRepository.getTrainerByUserId(id),
+      {
+        ttlSeconds: TRAINER_LIST_TTL_SECONDS,
+        tags: trainerDetailTags(id),
+      },
+    );
     if (!trainer) {
       throw new NotFoundException(`Trainer with id ${id} not found`);
     }
@@ -108,7 +147,16 @@ export class TrainerService {
       ...(hashedPassword && { password: hashedPassword }),
     };
 
-    return this.trainerRepository.updateTrainer(id, updateData);
+    const updated = await this.trainerRepository.updateTrainer(id, updateData);
+    await this.appCacheService.invalidateTags(
+      buildTrainerInvalidationTags({
+        trainerId: id,
+        includeList: true,
+        includeAvailability: true,
+      }),
+    );
+
+    return updated;
   }
 
   /**
@@ -120,6 +168,13 @@ export class TrainerService {
 
     // Delete trainer
     await this.trainerRepository.deleteTrainer(id);
+    await this.appCacheService.invalidateTags(
+      buildTrainerInvalidationTags({
+        trainerId: id,
+        includeList: true,
+        includeAvailability: true,
+      }),
+    );
 
     return { message: `Trainer ${id} deleted successfully` };
   }
@@ -133,7 +188,14 @@ export class TrainerService {
    */
   async getAvailabilities(id: string): Promise<TrainerAvailability[]> {
     await this.findOne(id);
-    return this.trainerRepository.getAvailabilities(id);
+    return this.appCacheService.remember(
+      buildTrainerAvailabilityKey(id),
+      () => this.trainerRepository.getAvailabilities(id),
+      {
+        ttlSeconds: TRAINER_AVAILABILITY_TTL_SECONDS,
+        tags: trainerAvailabilityTags(id),
+      },
+    );
   }
 
   /**
@@ -144,7 +206,15 @@ export class TrainerService {
     slots: TrainerAvailabilitySlotDto[],
   ): Promise<TrainerAvailability[]> {
     await this.findOne(id);
-    return this.trainerRepository.setAvailabilities(id, slots);
+    const availability = await this.trainerRepository.setAvailabilities(id, slots);
+    await this.appCacheService.invalidateTags(
+      buildTrainerInvalidationTags({
+        trainerId: id,
+        includeAvailability: true,
+      }),
+    );
+
+    return availability;
   }
 
   /**
@@ -152,7 +222,13 @@ export class TrainerService {
    */
   async deleteAvailability(trainerId: string, slotId: string): Promise<void> {
     await this.findOne(trainerId);
-    return this.trainerRepository.deleteAvailability(trainerId, slotId);
+    await this.trainerRepository.deleteAvailability(trainerId, slotId);
+    await this.appCacheService.invalidateTags(
+      buildTrainerInvalidationTags({
+        trainerId,
+        includeAvailability: true,
+      }),
+    );
   }
 
   async createTrainerClientLink(

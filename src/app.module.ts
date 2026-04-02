@@ -24,9 +24,11 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { WorkoutModule } from './modules/workout/workout.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { DietModule } from './modules/diet/diet.module';
+import { AppCacheModule } from './libs/cache/cache.module';
 
 @Module({
   imports: [
+    AppCacheModule,
     ScheduleModule.forRoot(), // Enable scheduled tasks (cron jobs)
     EventEmitterModule.forRoot(), // Enable cross-module event communication
     UserModule,

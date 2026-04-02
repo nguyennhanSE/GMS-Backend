@@ -5,6 +5,8 @@ import { ScheduleExceptionRepository } from './repositories/schedule-exception.r
 import { ClassScheduleRepository } from './repositories/class-schedule.repository';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NOTIFICATION_EVENTS } from '../../common/events/notification.events';
+import { ExceptionTypeDto } from './dto/schedule-exception.dto';
+import { AppCacheService } from '../../libs/cache/cache.service';
 
 describe('ScheduleExceptionService', () => {
   let service: ScheduleExceptionService;
@@ -12,6 +14,7 @@ describe('ScheduleExceptionService', () => {
   let scheduleRepository: jest.Mocked<any>;
   let prisma: jest.Mocked<any>;
   let eventEmitter: jest.Mocked<any>;
+  let appCacheService: jest.Mocked<Pick<AppCacheService, 'invalidateTags'>>;
 
   beforeEach(async () => {
     exceptionRepository = {
@@ -38,6 +41,10 @@ describe('ScheduleExceptionService', () => {
       emitAsync: jest.fn().mockResolvedValue([]),
     };
 
+    appCacheService = {
+      invalidateTags: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ScheduleExceptionService,
@@ -45,6 +52,7 @@ describe('ScheduleExceptionService', () => {
         { provide: ClassScheduleRepository, useValue: scheduleRepository },
         { provide: PrismaService, useValue: prisma },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: AppCacheService, useValue: appCacheService },
       ],
     }).compile();
 
@@ -54,6 +62,7 @@ describe('ScheduleExceptionService', () => {
   it('emits class-cancelled notifications for affected bookings when a cancellation is created', async () => {
     scheduleRepository.getById.mockResolvedValue({
       id: 'schedule-1',
+      trainerId: 'trainer-1',
       gymClass: { className: 'Sunrise Yoga' },
     });
     exceptionRepository.findByScheduleIdAndDate.mockResolvedValue(null);
@@ -76,7 +85,7 @@ describe('ScheduleExceptionService', () => {
 
     await service.create('schedule-1', {
       exceptionDate: '2026-03-22',
-      type: 'CANCELLED',
+      type: ExceptionTypeDto.CANCELLED,
       reason: 'Trainer unavailable',
     });
 
@@ -98,11 +107,19 @@ describe('ScheduleExceptionService', () => {
         referenceId: 'booking-1',
       }),
     );
+    expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        'class-schedule:list',
+        'class-schedule:id:schedule-1',
+        'trainer:availability:trainer-1',
+      ]),
+    );
   });
 
   it('does not emit notifications for rescheduled exceptions', async () => {
     scheduleRepository.getById.mockResolvedValue({
       id: 'schedule-1',
+      trainerId: 'trainer-1',
       gymClass: { className: 'Sunrise Yoga' },
     });
     exceptionRepository.findByScheduleIdAndDate.mockResolvedValue(null);
@@ -110,12 +127,69 @@ describe('ScheduleExceptionService', () => {
 
     await service.create('schedule-1', {
       exceptionDate: '2026-03-22',
-      type: 'RESCHEDULED',
+      type: ExceptionTypeDto.RESCHEDULED,
       newStartTime: '09:00:00',
       newEndTime: '10:00:00',
     });
 
     expect(prisma.classBooking.findMany).not.toHaveBeenCalled();
     expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
+    expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        'class-schedule:id:schedule-1',
+        'trainer:availability:trainer-1',
+      ]),
+    );
+  });
+
+  it('invalidates schedule and trainer availability tags when updating an exception', async () => {
+    exceptionRepository.findById.mockResolvedValue({
+      id: 'exception-1',
+      scheduleId: 'schedule-1',
+      type: ExceptionTypeDto.CANCELLED,
+      newStartTime: null,
+      newEndTime: null,
+    });
+    scheduleRepository.getById.mockResolvedValue({
+      id: 'schedule-1',
+      trainerId: 'trainer-1',
+      gymClass: { className: 'Sunrise Yoga' },
+    });
+    exceptionRepository.update.mockResolvedValue({ id: 'exception-1' });
+
+    await service.update('exception-1', {
+      type: ExceptionTypeDto.RESCHEDULED,
+      newStartTime: '09:00:00',
+      newEndTime: '10:00:00',
+    });
+
+    expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        'class-schedule:id:schedule-1',
+        'trainer:availability:trainer-1',
+      ]),
+    );
+  });
+
+  it('invalidates schedule and trainer availability tags when removing an exception', async () => {
+    exceptionRepository.findById.mockResolvedValue({
+      id: 'exception-1',
+      scheduleId: 'schedule-1',
+    });
+    scheduleRepository.getById.mockResolvedValue({
+      id: 'schedule-1',
+      trainerId: 'trainer-1',
+    });
+    exceptionRepository.delete.mockResolvedValue(undefined);
+
+    await service.remove('exception-1');
+
+    expect(exceptionRepository.delete).toHaveBeenCalledWith('exception-1');
+    expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        'class-schedule:id:schedule-1',
+        'trainer:availability:trainer-1',
+      ]),
+    );
   });
 });

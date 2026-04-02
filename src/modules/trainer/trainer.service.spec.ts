@@ -4,6 +4,7 @@ import { RequestUser } from '../../libs/decorator/current-user.decorator';
 import { ERoleName } from '../roles/enums/role.enum';
 import { CreateTrainerClientLinkDto, EndTrainerClientLinkDto } from './dto/trainer-client-link.dto';
 import { TrainerService } from './trainer.service';
+import { AppCacheService } from '../../libs/cache/cache.service';
 
 describe('TrainerService', () => {
   let service: TrainerService;
@@ -15,6 +16,12 @@ describe('TrainerService', () => {
     createTrainerClientLink: jest.Mock;
     endTrainerClientLink: jest.Mock;
     listActiveTrainerClientLinks: jest.Mock;
+    setAvailabilities: jest.Mock;
+    getAvailabilities: jest.Mock;
+  };
+  let appCacheService: {
+    remember: jest.Mock;
+    invalidateTags: jest.Mock;
   };
 
   const trainerUser: RequestUser = {
@@ -80,9 +87,21 @@ describe('TrainerService', () => {
       createTrainerClientLink: jest.fn(),
       endTrainerClientLink: jest.fn(),
       listActiveTrainerClientLinks: jest.fn(),
+      setAvailabilities: jest.fn(),
+      getAvailabilities: jest.fn(),
     };
 
-    service = new TrainerService(trainerRepository as never);
+    appCacheService = {
+      remember: jest.fn(
+        async (_key: string, loader: () => Promise<unknown>) => loader(),
+      ),
+      invalidateTags: jest.fn().mockResolvedValue(undefined),
+    };
+
+    service = new TrainerService(
+      trainerRepository as never,
+      appCacheService as unknown as AppCacheService,
+    );
   });
 
   it('creates an active trainer-client link after validating trainer and member', async () => {
@@ -184,6 +203,90 @@ describe('TrainerService', () => {
       memberUser.id,
     );
     expect(result?.id).toBe(activeLink.id);
+  });
+
+  it('loads trainer availability through the shared cache service', async () => {
+    const availability = [
+      {
+        id: 'slot-1',
+        trainerId: trainerUser.sub,
+        dayOfWeek: 1,
+        startTime: new Date('2026-03-24T09:00:00.000Z'),
+        endTime: new Date('2026-03-24T10:00:00.000Z'),
+        isAvailable: true,
+      },
+    ];
+
+    trainerRepository.getTrainerByUserId.mockResolvedValue({ id: trainerUser.sub });
+    trainerRepository.getAvailabilities.mockResolvedValue(availability);
+    appCacheService.remember.mockImplementation(
+      async (_key: string, loader: () => Promise<unknown>) => loader(),
+    );
+
+    const result = await service.getAvailabilities(trainerUser.sub);
+
+    expect(appCacheService.remember).toHaveBeenCalled();
+    expect(result).toEqual(availability);
+  });
+
+  it('loads trainer detail through the shared cache service', async () => {
+    const trainer = {
+      id: trainerUser.sub,
+      email: trainerUser.email,
+    };
+
+    trainerRepository.getTrainerByUserId.mockResolvedValue(trainer);
+    appCacheService.remember.mockImplementation(
+      async (_key: string, loader: () => Promise<unknown>) => loader(),
+    );
+
+    const result = await service.findOne(trainerUser.sub);
+
+    expect(appCacheService.remember).toHaveBeenCalledWith(
+      'gms:trainer:detail:trainer-1',
+      expect.any(Function),
+      expect.objectContaining({
+        ttlSeconds: 300,
+        tags: ['trainer:detail', 'trainer:id:trainer-1'],
+      }),
+    );
+    expect(result).toEqual(trainer);
+  });
+
+  it('invalidates trainer availability tags when availabilities are replaced', async () => {
+    const slots = [
+      {
+        dayOfWeek: 1,
+        startTime: '09:00',
+        endTime: '10:00',
+        isAvailable: true,
+      },
+    ];
+    const updatedAvailability = [
+      {
+        id: 'slot-1',
+        trainerId: trainerUser.sub,
+        dayOfWeek: 1,
+        startTime: new Date('2026-03-24T09:00:00.000Z'),
+        endTime: new Date('2026-03-24T10:00:00.000Z'),
+        isAvailable: true,
+      },
+    ];
+
+    trainerRepository.getTrainerByUserId.mockResolvedValue({ id: trainerUser.sub });
+    trainerRepository.setAvailabilities.mockResolvedValue(updatedAvailability);
+
+    const result = await service.setAvailabilities(trainerUser.sub, slots as never);
+
+    expect(trainerRepository.setAvailabilities).toHaveBeenCalledWith(
+      trainerUser.sub,
+      slots,
+    );
+    expect(appCacheService.invalidateTags).toHaveBeenCalledWith([
+      'trainer:id:trainer-1',
+      'trainer:availability:trainer-1',
+    ]);
+    expect(result).toEqual(updatedAvailability);
   });
 
   it('rejects ending a trainer-client link that does not belong to the trainer', async () => {

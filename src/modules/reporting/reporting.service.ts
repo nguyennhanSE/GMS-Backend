@@ -6,6 +6,14 @@ import {
   ReportingInterval,
   RevenueAnalyticsQueryDto,
 } from './dto/revenue-analytics-query.dto';
+import { AppCacheService } from '../../libs/cache/cache.service';
+import {
+  buildClassPerformanceKey,
+  buildReportingSummaryKey,
+  buildRevenueAnalyticsKey,
+  REPORTING_ANALYTICS_TTL_SECONDS,
+  REPORTING_SUMMARY_TTL_SECONDS,
+} from './reporting.cache';
 
 type RevenueAnalyticsRow = {
   bucket: Date;
@@ -28,109 +36,140 @@ type RevenueByCategoryRow = {
 
 @Injectable()
 export class ReportingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appCacheService: AppCacheService,
+  ) {}
 
   async getSummaryKpis() {
-    const now = new Date();
-    const startOfTodayUtc = this.startOfUtcDay(now);
-    const startOfTomorrowUtc = this.addUtcDays(startOfTodayUtc, 1);
+    return this.appCacheService.remember(
+      buildReportingSummaryKey(),
+      async () => {
+        const now = new Date();
+        const startOfTodayUtc = this.startOfUtcDay(now);
+        const startOfTomorrowUtc = this.addUtcDays(startOfTodayUtc, 1);
 
-    const [revenueAggregate, activeMembers, totalTrainers, todaysClassBookings] =
-      await Promise.all([
-        this.prisma.payment.aggregate({
-          _sum: { amount: true },
-          where: { status: PaymentStatus.SUCCESS },
-        }),
-        this.prisma.user.count({
-          where: {
-            status: 'active',
-            userMembership: {
-              some: {
-                status: 'normal',
-                endDate: { gte: now },
-              },
-            },
-          },
-        }),
-        this.prisma.user.count({
-          where: {
-            status: 'active',
-            userRole: {
-              some: {
-                role: {
-                  name: 'TRAINER',
+        const [
+          revenueAggregate,
+          activeMembers,
+          totalTrainers,
+          todaysClassBookings,
+        ] = await Promise.all([
+          this.prisma.payment.aggregate({
+            _sum: { amount: true },
+            where: { status: PaymentStatus.SUCCESS },
+          }),
+          this.prisma.user.count({
+            where: {
+              status: 'active',
+              userMembership: {
+                some: {
+                  status: 'normal',
+                  endDate: { gte: now },
                 },
               },
             },
-          },
-        }),
-        this.prisma.classBooking.count({
-          where: {
-            status: { in: ['pending', 'confirmed', 'attended'] },
-            bookingStartDate: {
-              gte: startOfTodayUtc,
-              lt: startOfTomorrowUtc,
+          }),
+          this.prisma.user.count({
+            where: {
+              status: 'active',
+              userRole: {
+                some: {
+                  role: {
+                    name: 'TRAINER',
+                  },
+                },
+              },
             },
-          },
-        }),
-      ]);
+          }),
+          this.prisma.classBooking.count({
+            where: {
+              status: { in: ['pending', 'confirmed', 'attended'] },
+              bookingStartDate: {
+                gte: startOfTodayUtc,
+                lt: startOfTomorrowUtc,
+              },
+            },
+          }),
+        ]);
 
-    return {
-      totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
-      activeMembers,
-      totalTrainers,
-      todaysClassBookings,
-    };
+        return {
+          totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
+          activeMembers,
+          totalTrainers,
+          todaysClassBookings,
+        };
+      },
+      {
+        ttlSeconds: REPORTING_SUMMARY_TTL_SECONDS,
+      },
+    );
   }
 
   async getRevenueAnalytics(query: RevenueAnalyticsQueryDto) {
-    const interval = query.interval ?? 'month';
-    const range = this.resolveRevenueRange(query, interval);
-    const querySql = this.buildRevenueAnalyticsQuery(
-      interval,
-      range.startDate,
-      range.endExclusive,
+    return this.appCacheService.remember(
+      buildRevenueAnalyticsKey(query),
+      async () => {
+        const interval = query.interval ?? 'month';
+        const range = this.resolveRevenueRange(query, interval);
+        const querySql = this.buildRevenueAnalyticsQuery(
+          interval,
+          range.startDate,
+          range.endExclusive,
+        );
+
+        const rows = await this.prisma.$queryRaw<RevenueAnalyticsRow[]>(querySql);
+
+        return {
+          interval,
+          startDate: this.toDateOnly(range.startDate),
+          endDate: this.toDateOnly(range.endInclusive),
+          buckets: rows.map((row) => ({
+            bucket: row.bucket.toISOString(),
+            totalRevenue: Number(row.total_revenue ?? '0'),
+            membershipRevenue: Number(row.membership_revenue ?? '0'),
+            classBookingRevenue: Number(row.class_booking_revenue ?? '0'),
+          })),
+        };
+      },
+      {
+        ttlSeconds: REPORTING_ANALYTICS_TTL_SECONDS,
+      },
     );
-
-    const rows = await this.prisma.$queryRaw<RevenueAnalyticsRow[]>(querySql);
-
-    return {
-      interval,
-      startDate: this.toDateOnly(range.startDate),
-      endDate: this.toDateOnly(range.endInclusive),
-      buckets: rows.map((row) => ({
-        bucket: row.bucket.toISOString(),
-        totalRevenue: Number(row.total_revenue ?? '0'),
-        membershipRevenue: Number(row.membership_revenue ?? '0'),
-        classBookingRevenue: Number(row.class_booking_revenue ?? '0'),
-      })),
-    };
   }
 
   async getClassPerformance(query: ClassPerformanceQueryDto) {
-    const range = this.resolveClassPerformanceRange(query);
-    const topClassesSql = this.buildTopClassesQuery(range);
-    const categoryRevenueSql = this.buildRevenueByCategoryQuery(range);
+    return this.appCacheService.remember(
+      buildClassPerformanceKey(query),
+      async () => {
+        const range = this.resolveClassPerformanceRange(query);
+        const topClassesSql = this.buildTopClassesQuery(range);
+        const categoryRevenueSql = this.buildRevenueByCategoryQuery(range);
 
-    const [topBookedClasses, revenueByCategory] = await Promise.all([
-      this.prisma.$queryRaw<TopBookedClassRow[]>(topClassesSql),
-      this.prisma.$queryRaw<RevenueByCategoryRow[]>(categoryRevenueSql),
-    ]);
+        const [topBookedClasses, revenueByCategory] = await Promise.all([
+          this.prisma.$queryRaw<TopBookedClassRow[]>(topClassesSql),
+          this.prisma.$queryRaw<RevenueByCategoryRow[]>(categoryRevenueSql),
+        ]);
 
-    return {
-      startDate: range.startDate ? this.toDateOnly(range.startDate) : null,
-      endDate: range.endInclusive ? this.toDateOnly(range.endInclusive) : null,
-      topBookedClasses: topBookedClasses.map((row) => ({
-        classId: row.class_id,
-        className: row.class_name,
-        category: row.category,
-        bookingCount: Number(row.booking_count ?? '0'),
-      })),
-      revenueByCategory: revenueByCategory.map((row) => ({
-        category: row.category,
-        revenue: Number(row.revenue ?? '0'),
-      })),
-    };
+        return {
+          startDate: range.startDate ? this.toDateOnly(range.startDate) : null,
+          endDate: range.endInclusive ? this.toDateOnly(range.endInclusive) : null,
+          topBookedClasses: topBookedClasses.map((row) => ({
+            classId: row.class_id,
+            className: row.class_name,
+            category: row.category,
+            bookingCount: Number(row.booking_count ?? '0'),
+          })),
+          revenueByCategory: revenueByCategory.map((row) => ({
+            category: row.category,
+            revenue: Number(row.revenue ?? '0'),
+          })),
+        };
+      },
+      {
+        ttlSeconds: REPORTING_ANALYTICS_TTL_SECONDS,
+      },
+    );
   }
 
   private resolveRevenueRange(

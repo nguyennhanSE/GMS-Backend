@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -18,20 +19,23 @@ export class AuthGuard implements CanActivate {
   private readonly context = AuthGuard.name;
 
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly reflector: Reflector,
-    private readonly logger: AppLogger,
+    @Optional() private readonly jwtService?: JwtService,
+    @Optional() private readonly reflector?: Reflector,
+    @Optional() private readonly logger?: AppLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const reflector = this.reflector ?? new Reflector();
+    const jwtService = this.jwtService ?? new JwtService();
+
     // Check if the route is marked as public
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
+    const isPublic = reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
       context.getHandler(),
       context.getClass(),
     ]);
 
     if (isPublic) {
-      this.logger.debug(
+      this.logger?.debug(
         `[${this.context}] Route is public, skipping authentication`,
       );
       return true;
@@ -41,18 +45,18 @@ export class AuthGuard implements CanActivate {
     const token = this.extractTokenFromHeader(request);
 
     if (!token) {
-      this.logger.warn(`[${this.context}] No token found in request`);
+      this.logger?.warn(`[${this.context}] No token found in request`);
       throw new UnauthorizedException('Access token is required');
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync<TokenPayload>(token, {
+      const payload = await jwtService.verifyAsync<TokenPayload>(token, {
         secret: config.JWT_SECRET_ACCESS_TOKEN,
       });
 
       // Verify that this is an access token
       if (payload.tokenType !== tokenType.AccessToken) {
-        this.logger.warn(
+        this.logger?.warn(
           `[${this.context}] Invalid token type: ${payload.tokenType}`,
         );
         throw new UnauthorizedException('Invalid token type');
@@ -66,7 +70,7 @@ export class AuthGuard implements CanActivate {
         roles: payload.roles,
       };
 
-      this.logger.debug(
+      this.logger?.debug(
         `[${this.context}] User authenticated successfully`,
         {
           userId: payload.sub,
@@ -77,7 +81,7 @@ export class AuthGuard implements CanActivate {
 
       return true;
     } catch (error) {
-      this.logger.error(
+      this.logger?.error(
         `[${this.context}] Token verification failed`,
         error as Error,
       );

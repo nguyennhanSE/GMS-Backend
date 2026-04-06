@@ -254,5 +254,30 @@ describe('NotificationService', () => {
         }),
       );
     });
+
+    it('persists trainer-booking lifecycle notifications through the shared handler', async () => {
+      const payload = createPayload({
+        type: NotificationType.BOOKING,
+        title: 'Trainer booking accepted',
+        message: 'Complete payment to confirm the session.',
+        referenceId: 'trainer-booking-1',
+        metadata: {
+          eventKey: NOTIFICATION_EVENTS.TRAINER_BOOKING_ACCEPTED,
+          bookingId: 'trainer-booking-1',
+        },
+      });
+
+      await service.handleTrainerBookingEvent(payload);
+
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: NotificationType.BOOKING,
+            title: 'Trainer booking accepted',
+            referenceId: 'trainer-booking-1',
+          }),
+        }),
+      );
+    });
   });
 });

@@ -29,6 +29,18 @@ export class NotificationEmailListener {
     await this.sendNotificationEmail(payload);
   }
 
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_CREATED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_ACCEPTED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_REJECTED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_CONFIRMED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_CANCELLED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_REMINDER)
+  async handleTrainerBookingNotification(
+    payload: NotificationEventPayload,
+  ): Promise<void> {
+    await this.sendNotificationEmail(payload);
+  }
+
   private async sendNotificationEmail(
     payload: NotificationEventPayload,
   ): Promise<void> {

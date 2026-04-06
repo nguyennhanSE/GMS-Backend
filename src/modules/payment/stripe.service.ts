@@ -42,6 +42,14 @@ export class StripeService {
         targetId: params.targetId,
         userId: params.userId,
       },
+      payment_intent_data: {
+        metadata: {
+          paymentId: params.paymentId,
+          targetType: params.targetType,
+          targetId: params.targetId,
+          userId: params.userId,
+        },
+      },
     });
 
     this.logger.log(`Checkout session created: ${session.id}`);

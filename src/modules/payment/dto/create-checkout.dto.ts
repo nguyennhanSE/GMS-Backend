@@ -6,9 +6,10 @@ import {
   IsString,
   IsUUID,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { PaymentTargetType } from '@prisma/client';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCheckoutDto {
   @ApiProperty({ enum: PaymentTargetType, example: 'CLASS_BOOKING' })
@@ -21,13 +22,19 @@ export class CreateCheckoutDto {
   @IsNotEmpty()
   targetId: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 50000,
-    description: 'Amount in smallest currency unit',
+    description:
+      'Amount in smallest currency unit. Optional for TRAINER_BOOKING because the server derives it from the booking.',
   })
+  @ValidateIf(
+    (dto: CreateCheckoutDto) =>
+      dto.targetType !== PaymentTargetType.TRAINER_BOOKING ||
+      dto.amount !== undefined,
+  )
   @IsNumber()
   @Min(1)
-  amount: number;
+  amount?: number;
 
   @ApiProperty({ example: 'VND', required: false, default: 'VND' })
   @IsOptional()

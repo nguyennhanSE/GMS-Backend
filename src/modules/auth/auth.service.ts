@@ -28,6 +28,15 @@ export class AuthService {
         this.errorCode = this.context;
     }
 
+    private logCaughtError(operation: string, err: unknown): void {
+        if (err instanceof UnauthorizedException || err instanceof BadRequestException || err instanceof NotFoundException) {
+            this.logger.warn(`[${this.context}] ${operation} failed`, err);
+            return;
+        }
+
+        this.logger.error(`[${this.context}] ${operation} failed`, err);
+    }
+
     async registerMember(dto: RegisterMemberDto) {
         this.logger.debug(`[${this.context}] registerMember start`, {
             email: dto.email,
@@ -35,7 +44,7 @@ export class AuthService {
         try {
             return await this.userService.registerMember(dto);
         } catch (err) {
-            this.logger.error(`[${this.context}] registerMember failed`, err);
+            this.logCaughtError('registerMember', err);
             throw err;
         }
     }
@@ -132,7 +141,7 @@ export class AuthService {
                 refreshToken 
             };
         } catch (err) {
-            this.logger.error(`[${this.context}] login failed`, err);
+            this.logCaughtError('login', err);
             throw err;
         }
     }
@@ -157,7 +166,7 @@ export class AuthService {
             this.logger.debug(`[${this.context}] logout done`, { refreshToken });
             return { success: true };
         } catch (err) {
-            this.logger.error(`[${this.context}] logout failed`, err);
+            this.logCaughtError('logout', err);
             throw err;
         }
     }
@@ -261,7 +270,7 @@ export class AuthService {
             this.logger.debug(`[${this.context}] refreshToken done`, { userId: sub });
             return { accessToken, newRefreshToken };
         } catch (err) {
-            this.logger.error(`[${this.context}] refreshToken failed`, err);
+            this.logCaughtError('refreshToken', err);
             throw err;
         }
     }
@@ -325,7 +334,7 @@ export class AuthService {
                 refreshToken,
             };
         } catch (err) {
-            this.logger.error(`[${this.context}] oauthLogin failed`, err);
+            this.logCaughtError('oauthLogin', err);
             throw err;
         }
     }

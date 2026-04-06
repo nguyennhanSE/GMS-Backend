@@ -1,4 +1,12 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Optional,
+} from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { BaseError, ValidationException } from '../errors';
 import { AppLogger } from '../logger';
@@ -9,28 +17,50 @@ import { ResponseModel } from '../models/response';
 @Injectable()
 export class AllExceptionsFilter implements ExceptionFilter {
   constructor(
-    private readonly httpAdapterHost: HttpAdapterHost,
-    private readonly loggerService: AppLogger,
+    @Optional() private readonly httpAdapterHost?: HttpAdapterHost,
+    @Optional() private readonly loggerService?: AppLogger,
   ) { }
 
   public catch(exception: unknown, host: ArgumentsHost): void {
-    const { httpAdapter } = this.httpAdapterHost;
     const httpContext = host.switchToHttp();
     const response = httpContext.getResponse();
     const request = httpContext.getRequest();
+    const isClientError =
+      exception instanceof HttpException && exception.getStatus() < 500;
 
-    this.loggerService.error(`[AllExceptionsFilter]`, exception);
+    if (this.loggerService) {
+      if (isClientError) {
+        this.loggerService.warn(`[AllExceptionsFilter]`, exception);
+      } else {
+        this.loggerService.error(`[AllExceptionsFilter]`, exception);
+      }
+    } else {
+      if (isClientError) {
+        console.warn('[AllExceptionsFilter]', exception);
+      } else {
+        console.error('[AllExceptionsFilter]', exception);
+      }
+    }
 
     // Get language from Accept-Language header
-    const acceptLanguage = request.headers['accept-language'] || 'en';
-    const language = acceptLanguage.split(',')[0].split('-')[0]; // Extract primary language
+    const acceptLanguageHeader = request?.headers?.['accept-language'];
+    const acceptLanguage =
+      typeof acceptLanguageHeader === 'string' ? acceptLanguageHeader : 'en';
+    const language = acceptLanguage.split(',')[0].split('-')[0];
 
     const { httpStatus, errorPayload } = this.getStandardizedErrorResponse(exception, language);
 
     const responseModel = new ResponseModel();
     responseModel.setError(errorPayload as any);
 
-    httpAdapter.reply(response, responseModel, httpStatus);
+    const httpAdapter = this.httpAdapterHost?.httpAdapter;
+
+    if (httpAdapter) {
+      httpAdapter.reply(response, responseModel, httpStatus);
+      return;
+    }
+
+    response.status(httpStatus).json(responseModel);
   }
 
   private getStandardizedErrorResponse(

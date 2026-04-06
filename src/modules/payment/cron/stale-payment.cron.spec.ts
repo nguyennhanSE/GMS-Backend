@@ -14,6 +14,9 @@ describe('StalePaymentCronService', () => {
         findMany: jest.fn(),
         update: jest.fn(),
       },
+      trainerBooking: {
+        findUnique: jest.fn(),
+      },
     };
 
     paymentProducer = {
@@ -63,6 +66,7 @@ describe('StalePaymentCronService', () => {
       expect.objectContaining({
         paymentId: 'payment-stale',
         status: 'FAILED',
+        failureReason: 'SESSION_EXPIRED',
       }),
     );
   });
@@ -84,8 +88,37 @@ describe('StalePaymentCronService', () => {
     expect(prisma.payment.findMany).toHaveBeenCalledWith({
       where: {
         status: 'PENDING',
-        createdAt: { lt: expect.any(Date) },
       },
+    });
+  });
+
+  it('expires stale trainer-booking payments from the booking acceptance window', async () => {
+    const staleTrainerPayment = {
+      id: 'payment-trainer-stale',
+      userId: 'user-1',
+      targetType: 'TRAINER_BOOKING',
+      targetId: 'booking-1',
+      amount: 250000,
+      currency: 'VND',
+      status: 'PENDING',
+      createdAt: new Date(),
+    };
+    prisma.payment.findMany.mockResolvedValue([staleTrainerPayment]);
+    prisma.trainerBooking.findUnique.mockResolvedValue({
+      status: 'ACCEPTED_PENDING_PAYMENT',
+      startAt: new Date(Date.now() + 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 31 * 60 * 1000),
+    });
+    prisma.payment.update.mockResolvedValue({
+      ...staleTrainerPayment,
+      status: 'FAILED',
+    });
+
+    await cronService.sweepStalePayments();
+
+    expect(prisma.payment.update).toHaveBeenCalledWith({
+      where: { id: 'payment-trainer-stale' },
+      data: { status: 'FAILED', failureReason: 'SESSION_EXPIRED' },
     });
   });
 });

@@ -26,6 +26,14 @@ model User {
   address   String?  @db.Text
   status    String?  @db.VarChar(50)
   avatarUrl String?  @map("avatar_url") @db.Text
+  ptSessionPrice30 Int @default(150000) @map("pt_session_price_30")
+  ptSessionPrice60 Int @default(250000) @map("pt_session_price_60")
+  ptSessionPrice90 Int @default(350000) @map("pt_session_price_90")
+  trainerSpecialization String? @map("trainer_specialization") @db.VarChar(255)
+  trainerExperienceYears Int? @map("trainer_experience_years")
+  trainerBiography String? @map("trainer_biography") @db.Text
+  trainerCertifications String[] @default([]) @map("trainer_certifications")
+  trainerAreasOfExpertise String[] @default([]) @map("trainer_areas_of_expertise")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
@@ -37,6 +45,8 @@ model User {
   userRole UserRole[]
   userMembership UserMembership[]
   classBookings ClassBooking[]
+  trainerBookingsAsMember TrainerBooking[] @relation("TrainerBookingMember")
+  trainerBookingsAsTrainer TrainerBooking[] @relation("TrainerBookingTrainer")
   payments Payment[]
   sessions Session[]
   trainerAvailabilities TrainerAvailability[]
@@ -98,6 +108,7 @@ enum PaymentStatus {
 enum PaymentTargetType {
   CLASS_BOOKING
   MEMBERSHIP
+  TRAINER_BOOKING
 }
 
 enum NotificationType {
@@ -129,6 +140,18 @@ enum ChatMessageSource {
 enum TrainerClientLinkStatus {
   ACTIVE
   ENDED
+}
+
+enum TrainerBookingStatus {
+  PENDING_REVIEW
+  REJECTED
+  ACCEPTED_PENDING_PAYMENT
+  PAYMENT_FAILED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+  EXPIRED
 }
 
 enum DietPlanStatus {
@@ -205,6 +228,7 @@ model Payment {
   // Relations
   user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
   userMembership    UserMembership?
+  trainerBooking    TrainerBooking?
 
   @@index([userId])
   @@index([targetType, targetId])
@@ -471,6 +495,37 @@ model TrainerClientLink {
   @@index([trainerId, memberId, status])
   @@index([memberId, status])
   @@map("trainer_client_links")
+}
+
+model TrainerBooking {
+  id String @id @default(uuid()) @db.Uuid
+  memberId String @map("member_id") @db.Uuid
+  trainerId String @map("trainer_id") @db.Uuid
+  startAt DateTime @map("start_at") @db.Timestamp(6)
+  endAt DateTime @map("end_at") @db.Timestamp(6)
+  status TrainerBookingStatus @default(PENDING_REVIEW)
+  price Decimal @db.Decimal(10, 2)
+  currency String @default("VND") @db.VarChar(3)
+  paymentId String? @unique @map("payment_id") @db.Uuid
+  notes String? @db.Text
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamp(6)
+  cancelReason String? @map("cancel_reason") @db.Text
+  rescheduledFromBookingId String? @map("rescheduled_from_booking_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  member User @relation("TrainerBookingMember", fields: [memberId], references: [id], onDelete: Cascade)
+  trainer User @relation("TrainerBookingTrainer", fields: [trainerId], references: [id], onDelete: Restrict)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  rescheduledFromBooking TrainerBooking? @relation("TrainerBookingReschedule", fields: [rescheduledFromBookingId], references: [id], onDelete: SetNull)
+  rescheduledBookings TrainerBooking[] @relation("TrainerBookingReschedule")
+
+  @@index([trainerId, startAt])
+  @@index([trainerId, status, startAt])
+  @@index([memberId, startAt])
+  @@index([memberId, status, startAt])
+  @@index([paymentId])
+  @@map("trainer_bookings")
 }
 
 model DietPlan {

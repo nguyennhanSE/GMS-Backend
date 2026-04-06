@@ -59,4 +59,23 @@ describe('NotificationEmailListener', () => {
 
     await expect(listener.handleClassCancelled(payload)).resolves.toBeUndefined();
   });
+
+  it('routes trainer-booking notification events through the same email sender', async () => {
+    await listener.handleTrainerBookingNotification({
+      ...payload,
+      type: NotificationType.BOOKING,
+      title: 'Trainer booking reminder',
+      metadata: { eventKey: 'notification.trainer-booking.reminder' },
+    });
+
+    expect(emailService.sendNotificationEmail).toHaveBeenCalledWith(
+      {
+        id: 'user-1',
+        name: 'Test Member',
+        email: 'member@test.local',
+      },
+      'Trainer booking reminder',
+      'Please update your card.',
+    );
+  });
 });

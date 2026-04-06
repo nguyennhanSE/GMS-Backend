@@ -1,4 +1,11 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { StripeService } from './stripe.service';
 import { PaymentProducer } from './payment.producer';
@@ -7,6 +14,7 @@ import { PaymentEventPayload } from './dto/webhook-event.dto';
 import { STALE_PAYMENT_THRESHOLD_MINUTES } from './constants/payment.constants';
 import { PaymentStatus, Prisma } from '@prisma/client';
 import Stripe from 'stripe';
+import { TRAINER_BOOKING_PENDING_PAYMENT_TTL_MS } from '../trainer-booking/constants/trainer-booking.constants';
 
 @Injectable()
 export class PaymentService {
@@ -19,19 +27,30 @@ export class PaymentService {
   ) {}
 
   async createCheckout(userId: string, dto: CreateCheckoutDto) {
+    const normalizedDto = await this.normalizeCheckoutRequest(userId, dto);
+    const amount = normalizedDto.amount;
+    const currency = normalizedDto.currency ?? 'VND';
+
+    if (amount === undefined) {
+      throw new BadRequestException('Payment amount is required');
+    }
+
     // Dedup: return existing valid session or expire stale ones
     const existing = await this.prisma.payment.findFirst({
       where: {
-        targetType: dto.targetType,
-        targetId: dto.targetId,
+        targetType: normalizedDto.targetType,
+        targetId: normalizedDto.targetId,
         status: 'PENDING',
       },
     });
 
     if (existing) {
       const ageMinutes = (Date.now() - existing.createdAt.getTime()) / 60000;
+      const staleThresholdMinutes = this.getStalePaymentThresholdMinutes(
+        normalizedDto.targetType,
+      );
       if (
-        ageMinutes < STALE_PAYMENT_THRESHOLD_MINUTES &&
+        ageMinutes < staleThresholdMinutes &&
         existing.checkoutUrl
       ) {
         this.logger.log(
@@ -52,10 +71,10 @@ export class PaymentService {
     const payment = await this.prisma.payment.create({
       data: {
         userId,
-        targetType: dto.targetType,
-        targetId: dto.targetId,
-        amount: dto.amount,
-        currency: dto.currency ?? 'VND',
+        targetType: normalizedDto.targetType,
+        targetId: normalizedDto.targetId,
+        amount,
+        currency,
         status: 'PENDING',
       },
     });
@@ -63,11 +82,11 @@ export class PaymentService {
     const session = await this.stripeService.createCheckoutSession({
       paymentId: payment.id,
       userId,
-      targetType: dto.targetType,
-      targetId: dto.targetId,
-      amount: dto.amount,
-      currency: dto.currency ?? 'VND',
-      productName: `${dto.targetType} Payment`,
+      targetType: normalizedDto.targetType,
+      targetId: normalizedDto.targetId,
+      amount,
+      currency,
+      productName: `${normalizedDto.targetType} Payment`,
     });
 
     await this.prisma.payment.update({
@@ -80,6 +99,48 @@ export class PaymentService {
     );
 
     return { checkoutUrl: session.url };
+  }
+
+  private async normalizeCheckoutRequest(
+    userId: string,
+    dto: CreateCheckoutDto,
+  ): Promise<CreateCheckoutDto> {
+    if (dto.targetType !== 'TRAINER_BOOKING') {
+      return dto;
+    }
+
+    const booking = await this.prisma.trainerBooking.findUnique({
+      where: { id: dto.targetId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Trainer booking ${dto.targetId} not found`);
+    }
+
+    if (booking.memberId !== userId) {
+      throw new ForbiddenException(
+        "Cannot initiate payment for another member's trainer booking",
+      );
+    }
+
+    if (this.hasTrainerBookingPaymentWindowExpired(booking)) {
+      await this.expireTrainerBookingPaymentWindow(booking.id);
+      throw new BadRequestException(
+        'Trainer booking payment window expired. Create a new booking request to continue.',
+      );
+    }
+
+    if (booking.status !== 'ACCEPTED_PENDING_PAYMENT') {
+      throw new BadRequestException(
+        `Trainer booking is '${booking.status}', payment can only start after trainer acceptance`,
+      );
+    }
+
+    return {
+      ...dto,
+      amount: Number(booking.price),
+      currency: booking.currency,
+    };
   }
 
   async handleWebhook(rawBody: Buffer, signature: string) {
@@ -150,8 +211,8 @@ export class PaymentService {
   }
 
   private async handlePaymentFailed(event: Stripe.Event) {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const payment = await this.findPaymentBySessionId(session.id);
+    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    const payment = await this.findPaymentForFailedIntent(paymentIntent);
     if (!payment) return;
 
     if (
@@ -170,6 +231,7 @@ export class PaymentService {
       data: {
         status: 'FAILED',
         failureReason: 'PAYMENT_DECLINED',
+        providerPaymentId: paymentIntent.id,
         metadata: JSON.parse(JSON.stringify(event)) as Prisma.InputJsonValue,
       },
     });
@@ -246,6 +308,59 @@ export class PaymentService {
     return payment;
   }
 
+  private async findPaymentForFailedIntent(intent: Stripe.PaymentIntent) {
+    const paymentIdFromMetadata = intent.metadata?.paymentId;
+    let payment = paymentIdFromMetadata
+      ? await this.prisma.payment.findUnique({
+          where: { id: paymentIdFromMetadata },
+        })
+      : null;
+
+    if (!payment && intent.id) {
+      payment = await this.prisma.payment.findUnique({
+        where: { providerPaymentId: intent.id },
+      });
+    }
+
+    if (!payment) {
+      this.logger.warn(`No payment found for failed payment intent: ${intent.id}`);
+    }
+
+    return payment;
+  }
+
+  private getStalePaymentThresholdMinutes(targetType: string): number {
+    if (targetType === 'TRAINER_BOOKING') {
+      return TRAINER_BOOKING_PENDING_PAYMENT_TTL_MS / 60000;
+    }
+
+    return STALE_PAYMENT_THRESHOLD_MINUTES;
+  }
+
+  private hasTrainerBookingPaymentWindowExpired(booking: {
+    startAt: Date;
+    updatedAt: Date;
+  }): boolean {
+    const now = Date.now();
+    return (
+      booking.startAt.getTime() <= now ||
+      booking.updatedAt.getTime() + TRAINER_BOOKING_PENDING_PAYMENT_TTL_MS <= now
+    );
+  }
+
+  private async expireTrainerBookingPaymentWindow(bookingId: string): Promise<void> {
+    await this.prisma.trainerBooking.updateMany({
+      where: {
+        id: bookingId,
+        status: 'ACCEPTED_PENDING_PAYMENT',
+      },
+      data: {
+        status: 'EXPIRED',
+        cancelReason: 'SESSION_EXPIRED',
+      },
+    });
+  }
+
   private async emitEvent(paymentId: string, status: PaymentStatus) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
@@ -261,6 +376,7 @@ export class PaymentService {
       status: payment.status,
       amount: Number(payment.amount),
       currency: payment.currency,
+      failureReason: payment.failureReason,
       timestamp: new Date().toISOString(),
     };
 

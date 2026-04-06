@@ -158,7 +158,7 @@ describe('Workout Module Integration (e2e)', () => {
         memberId: {
           in: [workoutTestData?.memberUser.id, secondaryMemberId].filter(
             Boolean,
-          ) as string[],
+          ),
         },
       },
     });

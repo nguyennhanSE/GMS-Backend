@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../libs/decorator';
@@ -15,18 +16,19 @@ export class RolesGuard implements CanActivate {
   private readonly context = RolesGuard.name;
 
   constructor(
-    private readonly reflector: Reflector,
-    private readonly logger: AppLogger,
+    @Optional() private readonly reflector?: Reflector,
+    @Optional() private readonly logger?: AppLogger,
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
+    const reflector = this.reflector ?? new Reflector();
+    const requiredRoles = reflector.getAllAndOverride<string[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
     if (!requiredRoles || requiredRoles.length === 0) {
-      this.logger.debug(
+      this.logger?.debug(
         `[${this.context}] No roles required for this route`,
       );
       return true;
@@ -38,14 +40,14 @@ export class RolesGuard implements CanActivate {
     const user = request.user;
 
     if (!user || !user.sub) {
-      this.logger.warn(`[${this.context}] No user found in request`);
+      this.logger?.warn(`[${this.context}] No user found in request`);
       throw new ForbiddenException('User not authenticated');
     }
 
     try {
       // Get user roles from request (attached by AuthGuard)
       const userRoles: string[] = user.roles ?? [];
-      this.logger.debug(`[${this.context}] User roles`, {
+      this.logger?.debug(`[${this.context}] User roles`, {
         userId: user.sub,
         userRoles,
         requiredRoles,
@@ -57,7 +59,7 @@ export class RolesGuard implements CanActivate {
       );
 
       if (!hasRequiredRole) {
-        this.logger.warn(
+        this.logger?.warn(
           `[${this.context}] User does not have required role`,
           {
             userId: user.sub,
@@ -68,7 +70,7 @@ export class RolesGuard implements CanActivate {
         throw new ForbiddenException('Insufficient permissions');
       }
 
-      this.logger.debug(`[${this.context}] User has required role`, {
+      this.logger?.debug(`[${this.context}] User has required role`, {
         userId: user.sub,
         userRoles,
         requiredRoles,
@@ -79,7 +81,7 @@ export class RolesGuard implements CanActivate {
       if (error instanceof ForbiddenException) {
         throw error;
       }
-      this.logger.error(
+      this.logger?.error(
         `[${this.context}] Error checking user roles`,
         error as Error,
       );

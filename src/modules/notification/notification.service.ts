@@ -120,6 +120,16 @@ export class NotificationService {
     await this.createNotification(payload);
   }
 
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_CREATED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_ACCEPTED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_REJECTED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_CONFIRMED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_CANCELLED)
+  @OnEvent(NOTIFICATION_EVENTS.TRAINER_BOOKING_REMINDER)
+  async handleTrainerBookingEvent(payload: NotificationEventPayload) {
+    await this.createNotification(payload);
+  }
+
   private async createNotification(payload: NotificationEventPayload) {
     await this.prisma.notification.create({
       data: {

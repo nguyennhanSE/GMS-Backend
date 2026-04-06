@@ -141,9 +141,22 @@ export class TrainerService {
     }
 
     // Prepare update data
-    const { password, ...otherData } = updateTrainerDto;
+    const {
+      password,
+      specialization,
+      experienceYears,
+      biography,
+      certifications,
+      areasOfExpertise,
+      ...otherData
+    } = updateTrainerDto;
     const updateData: Partial<TrainerEntity> & { password?: string } = {
       ...otherData,
+      trainerSpecialization: specialization,
+      trainerExperienceYears: experienceYears,
+      trainerBiography: biography,
+      trainerCertifications: certifications,
+      trainerAreasOfExpertise: areasOfExpertise,
       ...(hashedPassword && { password: hashedPassword }),
     };
 

@@ -8,6 +8,7 @@ export interface PaymentEventPayload {
   status: PaymentStatus;
   amount: number;
   currency: string;
+  failureReason?: string | null;
   timestamp: string;
 }
 

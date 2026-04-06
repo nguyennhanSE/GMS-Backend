@@ -46,7 +46,7 @@ export class TrainerRepository {
             
             // Check if user has TRAINER role
             const hasTrainerRole = trainer.userRole?.some(
-                (ur) => ur.role.name === ERoleName.TRAINER
+                (ur) => String(ur.role.name) === String(ERoleName.TRAINER)
             );
             
             if (!hasTrainerRole) {
@@ -87,7 +87,7 @@ export class TrainerRepository {
         
         // Check if user has TRAINER role
         const hasTrainerRole = trainer.userRole?.some(
-            (ur) => ur.role.name === ERoleName.TRAINER
+            (ur) => String(ur.role.name) === String(ERoleName.TRAINER)
         );
         
         if (!hasTrainerRole) {
@@ -178,6 +178,14 @@ export class TrainerRepository {
                 dob: updateData.dob ?? undefined,
                 address: updateData.address ?? undefined,
                 status: updateData.status ?? undefined,
+                ptSessionPrice30: updateData.ptSessionPrice30 ?? undefined,
+                ptSessionPrice60: updateData.ptSessionPrice60 ?? undefined,
+                ptSessionPrice90: updateData.ptSessionPrice90 ?? undefined,
+                trainerSpecialization: updateData.trainerSpecialization ?? undefined,
+                trainerExperienceYears: updateData.trainerExperienceYears ?? undefined,
+                trainerBiography: updateData.trainerBiography ?? undefined,
+                trainerCertifications: updateData.trainerCertifications ?? undefined,
+                trainerAreasOfExpertise: updateData.trainerAreasOfExpertise ?? undefined,
             },
         });
 
@@ -531,7 +539,12 @@ export class TrainerRepository {
         },
         roleName: ERoleName,
     ) {
-        return user.userRole?.some((userRole) => userRole.role.name === roleName) ?? false;
+        return (
+            user.userRole?.some(
+                (userRole) =>
+                    String(userRole.role.name) === String(roleName),
+            ) ?? false
+        );
     }
 
     private trainerClientLinkInclude() {

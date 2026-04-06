@@ -50,7 +50,7 @@ function createAppCacheState(): AppCacheState {
     const cache = createCache({
       stores: [keyv],
       ttl: (config.REDIS_TTL_SECONDS ?? APP_CACHE_DEFAULT_TTL_SECONDS) * 1000,
-    }) as Cache;
+    });
 
     logger.log('Redis cache enabled.');
     return {

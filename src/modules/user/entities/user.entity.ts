@@ -12,6 +12,14 @@ export class UserEntity {
   address?: string | null;
   status?: string | null;
   avatarUrl?: string | null;
+  ptSessionPrice30?: number | null;
+  ptSessionPrice60?: number | null;
+  ptSessionPrice90?: number | null;
+  trainerSpecialization?: string | null;
+  trainerExperienceYears?: number | null;
+  trainerBiography?: string | null;
+  trainerCertifications?: string[] | null;
+  trainerAreasOfExpertise?: string[] | null;
 
   createdAt?: Date | null;
 

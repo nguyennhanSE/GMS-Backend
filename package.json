@@ -18,6 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:api": "playwright test",
+    "test:api:server": "node -r ts-node/register/transpile-only -r tsconfig-paths/register test/playwright/server.ts",
     "seed": "ts-node -r tsconfig-paths/register prisma/seed.ts",
     "db:deploy": "npx prisma migrate deploy"
   },
@@ -59,6 +61,7 @@
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",

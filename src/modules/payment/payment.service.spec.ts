@@ -39,6 +39,9 @@ describe('PaymentService', () => {
         findMany: jest.fn(),
         findFirst: jest.fn(),
       },
+      trainerBooking: {
+        findUnique: jest.fn(),
+      },
     };
 
     stripeService = {
@@ -144,6 +147,75 @@ describe('PaymentService', () => {
       // Should have created a new one
       expect(prisma.payment.create).toHaveBeenCalled();
     });
+
+    it('should derive amount and enforce ownership for trainer bookings', async () => {
+      prisma.trainerBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        memberId: 'user-1',
+        trainerId: 'trainer-1',
+        status: 'ACCEPTED_PENDING_PAYMENT',
+        price: 250000,
+        currency: 'VND',
+        startAt: new Date(Date.now() + 60 * 60 * 1000),
+        updatedAt: new Date(),
+      });
+      prisma.payment.findFirst.mockResolvedValue(null);
+      prisma.payment.create.mockResolvedValue({
+        ...mockPayment,
+        targetType: 'TRAINER_BOOKING',
+        amount: 250000,
+        currency: 'VND',
+      });
+      prisma.payment.update.mockResolvedValue({
+        ...mockPayment,
+        targetType: 'TRAINER_BOOKING',
+        amount: 250000,
+      });
+      stripeService.createCheckoutSession.mockResolvedValue({
+        id: 'cs_test_trainer',
+        url: 'https://checkout.stripe.com/trainer',
+      });
+
+      const result = await service.createCheckout('user-1', {
+        targetType: 'TRAINER_BOOKING' as any,
+        targetId: 'booking-1',
+        amount: 1,
+        currency: 'USD',
+      });
+
+      expect(result).toEqual({
+        checkoutUrl: 'https://checkout.stripe.com/trainer',
+      });
+      expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 250000,
+          currency: 'VND',
+          productName: 'TRAINER_BOOKING Payment',
+        }),
+      );
+    });
+
+    it('should reject trainer booking checkout for a non-owner', async () => {
+      prisma.trainerBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        memberId: 'other-user',
+        trainerId: 'trainer-1',
+        status: 'ACCEPTED_PENDING_PAYMENT',
+        price: 250000,
+        currency: 'VND',
+        startAt: new Date(Date.now() + 60 * 60 * 1000),
+        updatedAt: new Date(),
+      });
+
+      await expect(
+        service.createCheckout('user-1', {
+          targetType: 'TRAINER_BOOKING' as any,
+          targetId: 'booking-1',
+          amount: 250000,
+          currency: 'VND',
+        }),
+      ).rejects.toThrow();
+    });
   });
 
   describe('handleWebhook', () => {
@@ -247,7 +319,12 @@ describe('PaymentService', () => {
     it('should mark payment FAILED on payment_intent.payment_failed', async () => {
       const event = {
         type: 'payment_intent.payment_failed',
-        data: { object: { id: 'cs_test_123' } },
+        data: {
+          object: {
+            id: 'pi_test_456',
+            metadata: { paymentId: 'payment-1' },
+          },
+        },
       } as unknown as Stripe.Event;
 
       stripeService.verifyWebhookSignature.mockReturnValue(event);
@@ -266,6 +343,7 @@ describe('PaymentService', () => {
         data: expect.objectContaining({
           status: 'FAILED',
           failureReason: 'PAYMENT_DECLINED',
+          providerPaymentId: 'pi_test_456',
         }),
       });
     });

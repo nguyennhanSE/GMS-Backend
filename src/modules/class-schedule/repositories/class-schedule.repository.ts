@@ -1,6 +1,9 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
-import { ClassScheduleEntity } from '../entities/class-schedule.entity';
+import {
+  ClassScheduleEntity,
+  ClassScheduleOccurrenceEntity,
+} from '../entities/class-schedule.entity';
 import { CreateClassScheduleDto } from '../dto/create-class-schedule.dto';
 import { UpdateClassScheduleDto } from '../dto/update-class-schedule.dto';
 import { toClassScheduleEntity } from '../mapper/class-schedule.mapper';
@@ -8,7 +11,8 @@ import {
   IPaginate,
   PaginateOptions,
 } from '../../../libs/models/paginate/pagimate.model';
-import { Prisma, DayOfWeek } from '@prisma/client';
+import { ExceptionType, Prisma, DayOfWeek, ScheduleException } from '@prisma/client';
+import { toScheduleExceptionEntity } from '../mapper/schedule-exception.mapper';
 
 export interface ClassScheduleFilterDto {
   q?: string;
@@ -22,6 +26,12 @@ export interface ClassScheduleFilterDto {
 @Injectable()
 export class ClassScheduleRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  private withOptionalExceptions<T>(
+    schedule: T,
+  ): T & { scheduleExceptions?: ScheduleException[] } {
+    return schedule as T & { scheduleExceptions?: ScheduleException[] };
+  }
 
   /**
    * Get class schedule by ID with gymClass relation and optional booking count
@@ -37,7 +47,20 @@ export class ClassScheduleRepository {
     try {
       const classSchedule = await this.prisma.classSchedule.findUnique({
         where: { id: id.trim() },
-        include: { gymClass: true, scheduleDays: true },
+        include: {
+          gymClass: true,
+          scheduleDays: true,
+          ...(targetDate
+            ? {
+                scheduleExceptions: {
+                  where: {
+                    exceptionDate: this.normalizeDateOnly(targetDate),
+                  },
+                  take: 1,
+                },
+              }
+            : {}),
+        },
       });
 
       if (!classSchedule) {
@@ -57,6 +80,15 @@ export class ClassScheduleRepository {
         entity.bookingsCount = await this.countBookingsForDate(
           id,
           resolvedDate,
+        );
+      }
+
+      if (targetDate) {
+        const scheduleWithExceptions = this.withOptionalExceptions(classSchedule);
+        this.applyOccurrence(
+          entity,
+          scheduleWithExceptions.scheduleExceptions ?? [],
+          targetDate,
         );
       }
 
@@ -295,13 +327,29 @@ export class ClassScheduleRepository {
         orderBy,
         skip,
         take: limit,
-        include: { gymClass: true, scheduleDays: true },
+        include: {
+          gymClass: true,
+          scheduleDays: true,
+          ...(targetDate
+            ? {
+                scheduleExceptions: {
+                  where: {
+                    exceptionDate: this.normalizeDateOnly(targetDate),
+                  },
+                  take: 1,
+                },
+              }
+            : {}),
+        },
       }),
       counted ? this.prisma.classSchedule.count({ where }) : Promise.resolve(0),
     ]);
 
     // Map to entities
     const mappedDocs = docs.map(toClassScheduleEntity);
+    const docsWithOptionalExceptions = docs.map((doc) =>
+      this.withOptionalExceptions(doc),
+    );
 
     // Enrich with per-date booking counts
     if (mappedDocs.length > 0) {
@@ -315,6 +363,14 @@ export class ClassScheduleRepository {
         for (const doc of mappedDocs) {
           doc.bookingsCount = countMap.get(doc.id) ?? 0;
         }
+
+        mappedDocs.forEach((doc, index) => {
+          this.applyOccurrence(
+            doc,
+            docsWithOptionalExceptions[index].scheduleExceptions ?? [],
+            targetDate,
+          );
+        });
       } else {
         // No date: group by dayOfWeek, auto-resolve next occurrence per group
         // At most 7 queries (one per unique day), not N queries
@@ -451,6 +507,53 @@ export class ClassScheduleRepository {
       }
     }
     return map;
+  }
+
+  private applyOccurrence(
+    entity: ClassScheduleEntity,
+    scheduleExceptions: ScheduleException[],
+    targetDate: Date,
+  ): void {
+    const exception = scheduleExceptions[0]
+      ? toScheduleExceptionEntity(scheduleExceptions[0])
+      : null;
+    const currentBookings = entity.bookingsCount ?? 0;
+    const occurrence: ClassScheduleOccurrenceEntity = {
+      date: this.normalizeDateToUtcNoon(targetDate),
+      status: 'scheduled',
+      effectiveStartTime: entity.startTime,
+      effectiveEndTime: entity.endTime,
+      isBookable: true,
+      currentBookings,
+      remainingSlots: Math.max(0, entity.capacity - currentBookings),
+      exception,
+    };
+
+    if (exception?.type === ExceptionType.CANCELLED) {
+      occurrence.status = 'cancelled';
+      occurrence.isBookable = false;
+      occurrence.remainingSlots = 0;
+    }
+
+    if (exception?.type === ExceptionType.RESCHEDULED) {
+      occurrence.status = 'rescheduled';
+      occurrence.effectiveStartTime = exception.newStartTime ?? entity.startTime;
+      occurrence.effectiveEndTime = exception.newEndTime ?? entity.endTime;
+    }
+
+    entity.occurrence = occurrence;
+  }
+
+  private normalizeDateOnly(date: Date): Date {
+    const normalized = new Date(date);
+    normalized.setUTCHours(0, 0, 0, 0);
+    return normalized;
+  }
+
+  private normalizeDateToUtcNoon(date: Date): Date {
+    const normalized = new Date(date);
+    normalized.setUTCHours(12, 0, 0, 0);
+    return normalized;
   }
 
   /**

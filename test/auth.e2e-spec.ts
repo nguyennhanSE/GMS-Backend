@@ -262,7 +262,7 @@ describe('Auth Integration (e2e)', () => {
   describe('POST /auth/refresh-token', () => {
     it('[Test 7] should reject invalid/garbage refresh token', async () => {
       const res = await postRefresh({ refreshToken: 'garbage.token.value' });
-      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).toBe(401);
     });
 
     it('[Test 8] should issue new tokens on valid refresh', async () => {

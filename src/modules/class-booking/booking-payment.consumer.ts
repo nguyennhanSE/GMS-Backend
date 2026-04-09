@@ -32,7 +32,6 @@ export class BookingPaymentConsumer {
       this.logger.log(
         `Skipping non-booking event (targetType: ${payload.targetType})`,
       );
-      channel.ack(message);
       return;
     }
 
@@ -56,7 +55,6 @@ export class BookingPaymentConsumer {
       this.logger.log(
         `Skipping non-booking event (targetType: ${payload.targetType})`,
       );
-      channel.ack(message);
       return;
     }
 
@@ -86,7 +84,6 @@ export class BookingPaymentConsumer {
       this.logger.log(
         `Skipping non-booking event (targetType: ${payload.targetType})`,
       );
-      channel.ack(message);
       return;
     }
 

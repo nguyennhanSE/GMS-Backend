@@ -78,7 +78,8 @@ describe('TrainerBookingPaymentConsumer', () => {
     await consumer.handlePaymentSuccess(payload, createContext());
 
     expect(trainerBookingService.confirmByPayment).not.toHaveBeenCalled();
-    expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
+    expect(mockChannel.ack).not.toHaveBeenCalled();
+    expect(mockChannel.nack).not.toHaveBeenCalled();
   });
 
   it('emits a payment failed notification when the booking state changes', async () => {

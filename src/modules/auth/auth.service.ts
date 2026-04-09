@@ -37,6 +37,16 @@ export class AuthService {
         this.logger.error(`[${this.context}] ${operation} failed`, err);
     }
 
+    private async decodeRefreshTokenOrThrow(refreshToken: string): Promise<TokenPayload> {
+        try {
+            return await this.authRepository.decodeToken(refreshToken, {
+                secret: config.JWT_SECRET_REFRESH_TOKEN,
+            });
+        } catch {
+            throw new UnauthorizedException("Invalid refresh token");
+        }
+    }
+
     async registerMember(dto: RegisterMemberDto) {
         this.logger.debug(`[${this.context}] registerMember start`, {
             email: dto.email,
@@ -182,16 +192,11 @@ export class AuthService {
             // check refresh token used
             const isRefreshTokenUsed = await this.authRepository.isRefreshTokenUsed(refreshToken)
             if (isRefreshTokenUsed) {
-                const decoded = await this.authRepository.decodeToken(refreshToken, {
-                    secret: config.JWT_SECRET_REFRESH_TOKEN
-                })
+                const decoded = await this.decodeRefreshTokenOrThrow(refreshToken)
                 await this.authRepository.removeAllSessionOfUser(decoded.sub)
                 throw new UnauthorizedException("Refresh token already used!! Please login again")
             }
-            const decoded = await this.authRepository.decodeToken(
-                refreshToken,
-                { secret: config.JWT_SECRET_REFRESH_TOKEN },
-            );
+            const decoded = await this.decodeRefreshTokenOrThrow(refreshToken);
             this.logger.debug(`[${this.context}] refreshToken decoded`, decoded);
 
             if (!decoded) {

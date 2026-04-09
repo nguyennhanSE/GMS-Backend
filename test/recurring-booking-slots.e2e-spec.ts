@@ -46,21 +46,16 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
 
     await cleanupTestData(prisma);
     testData = await createTestData(prisma);
-
-    try {
-      adminToken = await loginAs(
-        app,
-        testData.adminUser.email,
-        testData.adminPassword,
-      );
-      memberToken = await loginAs(
-        app,
-        testData.memberUser.email,
-        testData.memberPassword,
-      );
-    } catch {
-      console.warn('Login failed - some tests will be skipped');
-    }
+    adminToken = await loginAs(
+      app,
+      testData.adminUser.email,
+      testData.adminPassword,
+    );
+    memberToken = await loginAs(
+      app,
+      testData.memberUser.email,
+      testData.memberPassword,
+    );
   }, 60000);
 
   afterAll(async () => {
@@ -72,6 +67,9 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
     await prisma.classBooking.deleteMany({
       where: { classScheduleId: testData.testSchedule.id },
     });
+    await prisma.scheduleException.deleteMany({
+      where: { scheduleId: testData.testSchedule.id },
+    });
   });
 
   // ==========================================================
@@ -80,8 +78,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
 
   describe('Bug Fix: Per-Date Booking (not all-time)', () => {
     it('should allow booking the same schedule on different dates', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
       const mondayAfter = addDays(nextMonday, 7);
 
@@ -122,8 +118,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
     });
 
     it('should NOT allow double-booking the same schedule on the same date', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
 
       // First booking
@@ -157,8 +151,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
 
   describe('Bug Fix: Cancel & Rebook', () => {
     it('should allow rebooking same schedule and date after cancellation', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
 
       // 1. Create booking
@@ -212,8 +204,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
 
   describe('Bug Fix: Per-Date Capacity Check', () => {
     it('should count capacity per-date, not all-time', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
       const mondayAfter = addDays(nextMonday, 7);
 
@@ -272,8 +262,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
     });
 
     it('should reject booking when specific date is at capacity', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
 
       // Pre-cleanup leftover temp users
@@ -330,8 +318,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
     });
 
     it('should NOT count cancelled bookings toward capacity', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
 
       // Pre-cleanup leftover temp users
@@ -393,8 +379,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
 
   describe('Remaining Slots: GET /class-schedule/list', () => {
     it('should return currentBookings and remainingSlots in response', async () => {
-      if (!adminToken) return;
-
       const response = await authRequest(app, adminToken)
         .get('/class-schedule/list')
         .send();
@@ -412,12 +396,11 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
         expect(typeof schedule.currentBookings).toBe('number');
         expect(typeof schedule.remainingSlots).toBe('number');
         expect(schedule.remainingSlots).toBeGreaterThanOrEqual(0);
+        expect(schedule).not.toHaveProperty('occurrence');
       }
     });
 
     it('should return correct remainingSlots for a specific date', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
 
       // Create 3 bookings for this Monday
@@ -457,6 +440,14 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
         // capacity=5, 3 bookings → currentBookings=3, remainingSlots=2
         expect(testSchedule.currentBookings).toBe(3);
         expect(testSchedule.remainingSlots).toBe(2);
+        expect(testSchedule.occurrence).toMatchObject({
+          date: formatDate(nextMonday),
+          status: 'scheduled',
+          isBookable: true,
+          currentBookings: 3,
+          remainingSlots: 2,
+          exception: null,
+        });
       }
 
       // Cleanup
@@ -469,8 +460,6 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
     });
 
     it('should show independent slots for different dates', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
       const mondayAfter = addDays(nextMonday, 7);
 
@@ -562,12 +551,99 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
         where: { email: { contains: 'date-b-' } },
       });
     });
+
+    it('should keep cancelled occurrences visible but unbookable in list responses', async () => {
+      const nextMonday = getNextDayOfWeek('MON');
+      const dateStr = formatDate(nextMonday);
+
+      const exceptionResponse = await authRequest(app, adminToken)
+        .post(`/class-schedule/${testData.testSchedule.id}/exceptions`)
+        .send({
+          exceptionDate: dateStr,
+          type: 'CANCELLED',
+          reason: 'Holiday closure',
+        });
+
+      expect(exceptionResponse.status).toBe(201);
+
+      const response = await authRequest(app, adminToken)
+        .get(`/class-schedule/list?date=${dateStr}&q=API Integration Test Class`)
+        .send();
+
+      expect(response.status).toBe(200);
+
+      const schedule = response.body.data.docs.find(
+        (item: any) => item.id === testData.testSchedule.id,
+      );
+
+      expect(schedule).toBeDefined();
+      expect(schedule.occurrence).toMatchObject({
+        date: dateStr,
+        status: 'cancelled',
+        isBookable: false,
+        remainingSlots: 0,
+        exception: {
+          type: 'CANCELLED',
+          reason: 'Holiday closure',
+        },
+      });
+      expect(schedule.remainingSlots).toBe(0);
+      expect(schedule.currentBookings).toBe(schedule.occurrence.currentBookings);
+    });
+
+    it('should return rescheduled effective times from the exception in list responses', async () => {
+      const nextMonday = getNextDayOfWeek('MON');
+      const dateStr = formatDate(nextMonday);
+
+      const exceptionResponse = await authRequest(app, adminToken)
+        .post(`/class-schedule/${testData.testSchedule.id}/exceptions`)
+        .send({
+          exceptionDate: dateStr,
+          type: 'RESCHEDULED',
+          reason: 'Moved to afternoon',
+          newStartTime: '14:00',
+          newEndTime: '15:00',
+        });
+
+      expect(exceptionResponse.status).toBe(201);
+
+      const response = await authRequest(app, adminToken)
+        .get(`/class-schedule/list?date=${dateStr}&q=API Integration Test Class`)
+        .send();
+
+      expect(response.status).toBe(200);
+
+      const schedule = response.body.data.docs.find(
+        (item: any) => item.id === testData.testSchedule.id,
+      );
+
+      expect(schedule).toBeDefined();
+      expect(schedule.startTime).toContain('T10:00:00.000Z');
+      expect(schedule.endTime).toContain('T11:00:00.000Z');
+      expect(schedule.occurrence).toMatchObject({
+        date: dateStr,
+        status: 'rescheduled',
+        isBookable: true,
+        exception: {
+          type: 'RESCHEDULED',
+          reason: 'Moved to afternoon',
+        },
+      });
+      expect(schedule.currentBookings).toBe(schedule.occurrence.currentBookings);
+      expect(schedule.remainingSlots).toBe(schedule.occurrence.remainingSlots);
+      expect(schedule.occurrence.effectiveStartTime).toBe(
+        schedule.occurrence.exception.newStartTime,
+      );
+      expect(schedule.occurrence.effectiveEndTime).toBe(
+        schedule.occurrence.exception.newEndTime,
+      );
+      expect(schedule.occurrence.effectiveStartTime).not.toBe(schedule.startTime);
+      expect(schedule.occurrence.effectiveEndTime).not.toBe(schedule.endTime);
+    });
   });
 
   describe('Remaining Slots: GET /class-schedule/:id', () => {
     it('should return remainingSlots for a specific schedule with date', async () => {
-      if (!adminToken) return;
-
       const nextMonday = getNextDayOfWeek('MON');
 
       // Create 1 booking
@@ -588,32 +664,115 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body.data.currentBookings).toBe(1);
       expect(response.body.data.remainingSlots).toBe(4); // capacity=5 - 1 booking
+      expect(response.body.data.occurrence).toMatchObject({
+        date: formatDate(nextMonday),
+        status: 'scheduled',
+        isBookable: true,
+        currentBookings: 1,
+        remainingSlots: 4,
+        exception: null,
+      });
     });
 
-    it('should auto-resolve to next occurrence when no date is provided', async () => {
-      if (!adminToken) return;
-
-      // Create a booking on the next Monday (test schedule is MON)
-      const nextMonday = getNextDayOfWeek('MON');
-      await prisma.classBooking.create({
-        data: {
-          userId: testData.memberUser.id,
-          classScheduleId: testData.testSchedule.id,
-          bookingStartDate: nextMonday,
-          bookingEndDate: nextMonday,
-          status: 'confirmed',
-        },
-      });
-
-      // Call WITHOUT date param — should auto-resolve to next Monday
+    it('should omit occurrence when no date is provided', async () => {
       const response = await authRequest(app, adminToken).get(
         `/class-schedule/${testData.testSchedule.id}`,
       );
 
       expect(response.status).toBe(200);
-      // Auto-resolved: should show real count, not 0
-      expect(response.body.data.currentBookings).toBe(1);
-      expect(response.body.data.remainingSlots).toBe(4); // capacity=5 - 1
+      expect(response.body.data).not.toHaveProperty('occurrence');
+    });
+  });
+
+  describe('Occurrence Contract: Date-Aware Exception Projection', () => {
+    it('should keep cancelled occurrences visible but unbookable in detail responses', async () => {
+      const nextMonday = getNextDayOfWeek('MON');
+      const exceptionResponse = await authRequest(app, adminToken)
+        .post(`/class-schedule/${testData.testSchedule.id}/exceptions`)
+        .send({
+          exceptionDate: formatDate(nextMonday),
+          type: 'CANCELLED',
+          reason: 'Holiday closure',
+        });
+
+      expect(exceptionResponse.status).toBe(201);
+
+      const response = await authRequest(app, adminToken).get(
+        `/class-schedule/${testData.testSchedule.id}?date=${formatDate(nextMonday)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.remainingSlots).toBe(0);
+      expect(typeof response.body.data.currentBookings).toBe('number');
+      expect(response.body.data.occurrence).toMatchObject({
+        date: formatDate(nextMonday),
+        status: 'cancelled',
+        isBookable: false,
+        remainingSlots: 0,
+        exception: {
+          type: 'CANCELLED',
+          reason: 'Holiday closure',
+        },
+      });
+      expect(response.body.data.currentBookings).toBe(
+        response.body.data.occurrence.currentBookings,
+      );
+      expect(response.body.data.occurrence.effectiveStartTime).toContain(
+        'T10:00:00.000Z',
+      );
+      expect(response.body.data.occurrence.effectiveEndTime).toContain(
+        'T11:00:00.000Z',
+      );
+    });
+
+    it('should preserve template times while projecting rescheduled occurrence times', async () => {
+      const nextMonday = getNextDayOfWeek('MON');
+      const exceptionResponse = await authRequest(app, adminToken)
+        .post(`/class-schedule/${testData.testSchedule.id}/exceptions`)
+        .send({
+          exceptionDate: formatDate(nextMonday),
+          type: 'RESCHEDULED',
+          reason: 'Moved to afternoon',
+          newStartTime: '14:00',
+          newEndTime: '15:00',
+        });
+
+      expect(exceptionResponse.status).toBe(201);
+
+      const response = await authRequest(app, adminToken).get(
+        `/class-schedule/${testData.testSchedule.id}?date=${formatDate(nextMonday)}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.startTime).toContain('T10:00:00.000Z');
+      expect(response.body.data.endTime).toContain('T11:00:00.000Z');
+      expect(response.body.data.occurrence).toMatchObject({
+        date: formatDate(nextMonday),
+        status: 'rescheduled',
+        isBookable: true,
+        exception: {
+          type: 'RESCHEDULED',
+          reason: 'Moved to afternoon',
+        },
+      });
+      expect(response.body.data.currentBookings).toBe(
+        response.body.data.occurrence.currentBookings,
+      );
+      expect(response.body.data.remainingSlots).toBe(
+        response.body.data.occurrence.remainingSlots,
+      );
+      expect(response.body.data.occurrence.effectiveStartTime).toBe(
+        response.body.data.occurrence.exception.newStartTime,
+      );
+      expect(response.body.data.occurrence.effectiveEndTime).toBe(
+        response.body.data.occurrence.exception.newEndTime,
+      );
+      expect(response.body.data.occurrence.effectiveStartTime).not.toBe(
+        response.body.data.startTime,
+      );
+      expect(response.body.data.occurrence.effectiveEndTime).not.toBe(
+        response.body.data.endTime,
+      );
     });
   });
 });

@@ -1,5 +1,6 @@
 import { ClassBookingEntity } from 'src/modules/class-booking/entities/class-booking.entity';
 import { GymClassEntity } from './gym-class.entity';
+import { ScheduleExceptionEntity } from './schedule-exception.entity';
 
 export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
 
@@ -9,6 +10,22 @@ export class ScheduleDayEntity {
   scheduleId!: string;
   dayOfWeek!: DayOfWeek;
   createdAt?: Date | null;
+}
+
+export type ClassScheduleOccurrenceStatus =
+  | 'scheduled'
+  | 'cancelled'
+  | 'rescheduled';
+
+export class ClassScheduleOccurrenceEntity {
+  date!: Date;
+  status!: ClassScheduleOccurrenceStatus;
+  effectiveStartTime!: Date;
+  effectiveEndTime!: Date;
+  isBookable!: boolean;
+  currentBookings!: number;
+  remainingSlots!: number;
+  exception?: ScheduleExceptionEntity | null;
 }
 
 export class ClassScheduleEntity {
@@ -41,6 +58,7 @@ export class ClassScheduleEntity {
   gymClass?: GymClassEntity | null;
   classBookings?: ClassBookingEntity[];
   scheduleDays?: ScheduleDayEntity[];
+  occurrence?: ClassScheduleOccurrenceEntity | null;
   trainer?: {
     id: string;
     firstName: string;

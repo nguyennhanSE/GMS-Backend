@@ -30,10 +30,11 @@ export class ScheduleExceptionRepository {
   async create(
     data: CreateScheduleExceptionData,
   ): Promise<ScheduleExceptionEntity> {
+    const exceptionDate = this.normalizeDateOnly(data.exceptionDate);
     const exception = await this.prisma.scheduleException.create({
       data: {
         scheduleId: data.scheduleId,
-        exceptionDate: data.exceptionDate,
+        exceptionDate,
         type: data.type,
         reason: data.reason,
         newStartTime: data.newStartTime,
@@ -73,11 +74,12 @@ export class ScheduleExceptionRepository {
     scheduleId: string,
     date: Date,
   ): Promise<ScheduleExceptionEntity | null> {
+    const normalizedDate = this.normalizeDateOnly(date);
     const exception = await this.prisma.scheduleException.findUnique({
       where: {
         scheduleId_exceptionDate: {
           scheduleId,
-          exceptionDate: date,
+          exceptionDate: normalizedDate,
         },
       },
     });
@@ -135,5 +137,11 @@ export class ScheduleExceptionRepository {
     await this.prisma.scheduleException.deleteMany({
       where: { scheduleId },
     });
+  }
+
+  private normalizeDateOnly(date: Date): Date {
+    const normalized = new Date(date);
+    normalized.setUTCHours(0, 0, 0, 0);
+    return normalized;
   }
 }

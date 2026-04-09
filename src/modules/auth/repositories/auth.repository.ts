@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { JwtService, JwtSignOptions, JwtVerifyOptions } from "@nestjs/jwt";
 import { Session as PrismaSession } from "@prisma/client";
+import { JsonWebTokenError, NotBeforeError, TokenExpiredError } from "jsonwebtoken";
 
 import { AppLogger } from "../../../libs/logger";
 import { PrismaService } from "prisma/prisma.service";
@@ -55,7 +56,19 @@ export class AuthRepository {
             );
             return payload;
         } catch (err) {
-            this.logger.error(`[${this.context}] decodeToken failed`, { ...meta, err });
+            if (
+                err instanceof JsonWebTokenError ||
+                err instanceof TokenExpiredError ||
+                err instanceof NotBeforeError
+            ) {
+                this.logger.warn(`[${this.context}] decodeToken rejected token`, {
+                    ...meta,
+                    name: err.name,
+                    message: err.message,
+                });
+            } else {
+                this.logger.error(`[${this.context}] decodeToken failed`, { ...meta, err });
+            }
             throw err;
         }
     }

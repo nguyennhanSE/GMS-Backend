@@ -82,13 +82,14 @@ describe('BookingPaymentConsumer', () => {
       expect(mockChannel.nack).not.toHaveBeenCalled();
     });
 
-    it('should skip non-booking events and ack', async () => {
+    it('should skip non-booking events without touching ack state', async () => {
       const payload = createPayload({ targetType: 'MEMBERSHIP' as any });
 
       await consumer.handlePaymentSuccess(payload, createContext());
 
       expect(classBookingService.confirmByPayment).not.toHaveBeenCalled();
-      expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
+      expect(mockChannel.ack).not.toHaveBeenCalled();
+      expect(mockChannel.nack).not.toHaveBeenCalled();
     });
 
     it('should ack on NotFoundException (permanent failure)', async () => {

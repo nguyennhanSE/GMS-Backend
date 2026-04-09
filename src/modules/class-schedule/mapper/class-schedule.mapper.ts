@@ -1,15 +1,25 @@
-import { Prisma } from '@prisma/client';
 import {
+  ClassSchedule as PrismaClassSchedule,
+  GymClass,
+  Prisma,
+  ScheduleDay,
+  ScheduleException,
+} from '@prisma/client';
+import {
+  ClassScheduleOccurrenceEntity,
   ClassScheduleEntity,
   DayOfWeek,
   ScheduleDayEntity,
 } from '../entities/class-schedule.entity';
 import { GymClassEntity, DifficultyLevel } from '../entities/gym-class.entity';
 import { toClassBookingEntity } from 'src/modules/class-booking/mapper/class-booking.mapper';
+import { toScheduleExceptionResponse } from './schedule-exception.mapper';
 
-type ClassScheduleModel = Prisma.ClassScheduleGetPayload<{
-  include: { gymClass: true; scheduleDays: true };
-}>;
+type ClassScheduleModel = PrismaClassSchedule & {
+  gymClass?: GymClass | null;
+  scheduleDays?: ScheduleDay[];
+  scheduleExceptions?: ScheduleException[];
+};
 type ClassScheduleWithRelations = Prisma.ClassScheduleGetPayload<{
   include: {
     classBookings: true;
@@ -44,6 +54,25 @@ export function toScheduleDayEntity(scheduleDay: any): ScheduleDayEntity {
     scheduleId: scheduleDay.scheduleId,
     dayOfWeek: scheduleDay.dayOfWeek as DayOfWeek,
     createdAt: scheduleDay.createdAt,
+  };
+}
+
+function formatDateOnly(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function toOccurrenceResponse(occurrence: ClassScheduleOccurrenceEntity) {
+  return {
+    date: formatDateOnly(occurrence.date),
+    status: occurrence.status,
+    effectiveStartTime: occurrence.effectiveStartTime,
+    effectiveEndTime: occurrence.effectiveEndTime,
+    isBookable: occurrence.isBookable,
+    currentBookings: occurrence.currentBookings,
+    remainingSlots: occurrence.remainingSlots,
+    exception: occurrence.exception
+      ? toScheduleExceptionResponse(occurrence.exception)
+      : null,
   };
 }
 
@@ -89,6 +118,11 @@ export function toResponse(entity: ClassScheduleEntity) {
         ? [entity.dayOfWeek]
         : [];
 
+  const currentBookings = entity.occurrence?.currentBookings ?? entity.bookingsCount ?? 0;
+  const remainingSlots =
+    entity.occurrence?.remainingSlots ??
+    Math.max(0, entity.capacity - (entity.bookingsCount ?? 0));
+
   return {
     id: entity.id,
     // Class info from gymClass
@@ -106,13 +140,18 @@ export function toResponse(entity: ClassScheduleEntity) {
     location: entity.location,
     capacity: entity.capacity,
     // Availability info (per-date, only present when date context is provided)
-    currentBookings: entity.bookingsCount ?? 0,
-    remainingSlots: Math.max(0, entity.capacity - (entity.bookingsCount ?? 0)),
+    currentBookings,
+    remainingSlots,
     isActive: entity.isActive,
     trainerId: entity.trainerId,
     trainer: entity.trainer,
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
+    ...(entity.occurrence
+      ? {
+          occurrence: toOccurrenceResponse(entity.occurrence),
+        }
+      : {}),
   };
 }
 

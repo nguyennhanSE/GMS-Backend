@@ -86,13 +86,14 @@ describe('MembershipPaymentConsumer', () => {
       expect(mockChannel.nack).not.toHaveBeenCalled();
     });
 
-    it('should skip non-membership events and ack', async () => {
+    it('should skip non-membership events without touching ack state', async () => {
       const payload = createPayload({ targetType: 'CLASS_BOOKING' as any });
 
       await consumer.handlePaymentSuccess(payload, createContext());
 
       expect(membershipsService.activateByPayment).not.toHaveBeenCalled();
-      expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
+      expect(mockChannel.ack).not.toHaveBeenCalled();
+      expect(mockChannel.nack).not.toHaveBeenCalled();
     });
 
     it('should ack on NotFoundException (permanent failure)', async () => {
@@ -147,13 +148,14 @@ describe('MembershipPaymentConsumer', () => {
       expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
     });
 
-    it('should skip non-membership events and ack', async () => {
+    it('should skip non-membership events without touching ack state', async () => {
       const payload = createPayload({ targetType: 'CLASS_BOOKING' as any });
 
       await consumer.handlePaymentFailed(payload, createContext());
 
       expect(membershipsService.deactivateByPayment).not.toHaveBeenCalled();
-      expect(mockChannel.ack).toHaveBeenCalledWith(mockMessage);
+      expect(mockChannel.ack).not.toHaveBeenCalled();
+      expect(mockChannel.nack).not.toHaveBeenCalled();
     });
 
     it('should not emit a local notification event when membership state did not change', async () => {

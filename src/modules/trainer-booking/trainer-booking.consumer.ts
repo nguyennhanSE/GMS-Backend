@@ -28,7 +28,6 @@ export class TrainerBookingPaymentConsumer {
     const message = context.getMessage();
 
     if (payload.targetType !== 'TRAINER_BOOKING') {
-      channel.ack(message);
       return;
     }
 
@@ -52,7 +51,6 @@ export class TrainerBookingPaymentConsumer {
     const message = context.getMessage();
 
     if (payload.targetType !== 'TRAINER_BOOKING') {
-      channel.ack(message);
       return;
     }
 
@@ -89,7 +87,6 @@ export class TrainerBookingPaymentConsumer {
     const message = context.getMessage();
 
     if (payload.targetType !== 'TRAINER_BOOKING') {
-      channel.ack(message);
       return;
     }
 

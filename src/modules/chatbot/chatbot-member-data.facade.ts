@@ -56,10 +56,22 @@ export class ChatbotMemberDataFacade {
     const lines = schedules.docs.slice(0, 5).map((schedule) => {
       const className = schedule.gymClass?.className ?? 'Class';
       const days = getDaysOfWeek(schedule).join(', ') || 'Schedule unavailable';
-      const startTime = schedule.startTime.toISOString().slice(11, 16);
-      const endTime = schedule.endTime.toISOString().slice(11, 16);
+      const occurrence = schedule.occurrence;
+      const startTime = (
+        occurrence?.effectiveStartTime ?? schedule.startTime
+      ).toISOString().slice(11, 16);
+      const endTime = (
+        occurrence?.effectiveEndTime ?? schedule.endTime
+      ).toISOString().slice(11, 16);
       const location = schedule.location ? ` at ${schedule.location}` : '';
-      return `- ${className}: ${days}, ${startTime}-${endTime}${location}`;
+      const occurrenceDate = occurrence?.date.toISOString().split('T')[0];
+      const occurrenceLabel =
+        occurrence?.status === 'cancelled'
+          ? ` [cancelled on ${occurrenceDate}]`
+          : occurrence?.status === 'rescheduled'
+            ? ` [rescheduled on ${occurrenceDate}]`
+            : '';
+      return `- ${className}: ${days}, ${startTime}-${endTime}${location}${occurrenceLabel}`;
     });
 
     return {

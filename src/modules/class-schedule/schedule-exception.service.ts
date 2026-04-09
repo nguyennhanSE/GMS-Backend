@@ -91,11 +91,12 @@ export class ScheduleExceptionService {
       newStartTime,
       newEndTime,
     });
+    const normalizedExceptionDate = createdException.exceptionDate;
 
     if (dto.type === ExceptionTypeDto.CANCELLED) {
       await this.emitClassCancelledNotifications(
         scheduleId,
-        exceptionDate,
+        normalizedExceptionDate,
         dto.reason,
         (schedule as any).gymClass?.className ?? 'Class',
         createdException.id,

@@ -32,7 +32,6 @@ export class MembershipPaymentConsumer {
       this.logger.log(
         `Skipping non-membership event (targetType: ${payload.targetType})`,
       );
-      channel.ack(message);
       return;
     }
 
@@ -60,7 +59,6 @@ export class MembershipPaymentConsumer {
       this.logger.log(
         `Skipping non-membership event (targetType: ${payload.targetType})`,
       );
-      channel.ack(message);
       return;
     }
 
@@ -89,7 +87,6 @@ export class MembershipPaymentConsumer {
       this.logger.log(
         `Skipping non-membership event (targetType: ${payload.targetType})`,
       );
-      channel.ack(message);
       return;
     }
 

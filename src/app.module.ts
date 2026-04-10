@@ -26,6 +26,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { DietModule } from './modules/diet/diet.module';
 import { AppCacheModule } from './libs/cache/cache.module';
 import { TrainerBookingModule } from './modules/trainer-booking/trainer-booking.module';
+import { TrainerMessagingModule } from './modules/trainer-messaging/trainer-messaging.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { TrainerBookingModule } from './modules/trainer-booking/trainer-booking.
     ChatbotModule,
     DietModule,
     TrainerBookingModule,
+    TrainerMessagingModule,
   ],
   controllers: [AppController],
   providers: [

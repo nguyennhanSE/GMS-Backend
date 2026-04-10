@@ -82,6 +82,13 @@ type ClassBookingConflictRecord = Prisma.ClassBookingGetPayload<{
   };
 }>;
 
+export type TrainerMessagingEligibleContact = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+};
+
 @Injectable()
 export class TrainerBookingService {
   private readonly logger = new Logger(TrainerBookingService.name);
@@ -604,31 +611,65 @@ export class TrainerBookingService {
     trainerId: string,
   ): Promise<boolean> {
     await this.expireStaleBookings();
-    const now = new Date();
-    const supportWindowStart = new Date(
-      now.getTime() -
-        TRAINER_BOOKING_MESSAGE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-    );
-
     const eligibleBooking = await this.prisma.trainerBooking.findFirst({
-      where: {
+      where: this.buildMessagingEligibilityWhere({
         memberId,
         trainerId,
-        OR: [
-          {
-            status: TrainerBookingStatus.CONFIRMED,
-            endAt: { gte: supportWindowStart },
-          },
-          {
-            status: TrainerBookingStatus.COMPLETED,
-            endAt: { gte: supportWindowStart },
-          },
-        ],
-      },
+      }),
       orderBy: { endAt: 'desc' },
     });
 
     return Boolean(eligibleBooking);
+  }
+
+  async listMessagingEligibleTrainers(
+    memberId: string,
+  ): Promise<TrainerMessagingEligibleContact[]> {
+    await this.expireStaleBookings();
+
+    const bookings = await this.prisma.trainerBooking.findMany({
+      where: this.buildMessagingEligibilityWhere({ memberId }),
+      orderBy: { endAt: 'desc' },
+      select: {
+        trainer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    return this.deduplicateMessagingContacts(
+      bookings.map((booking) => booking.trainer),
+    );
+  }
+
+  async listMessagingEligibleMembers(
+    trainerId: string,
+  ): Promise<TrainerMessagingEligibleContact[]> {
+    await this.expireStaleBookings();
+
+    const bookings = await this.prisma.trainerBooking.findMany({
+      where: this.buildMessagingEligibilityWhere({ trainerId }),
+      orderBy: { endAt: 'desc' },
+      select: {
+        member: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    return this.deduplicateMessagingContacts(
+      bookings.map((booking) => booking.member),
+    );
   }
 
   async sendUpcomingReminders(now: Date = new Date()): Promise<number> {
@@ -737,6 +778,49 @@ export class TrainerBookingService {
         `Trainer bookings must be one of ${TRAINER_BOOKING_SUPPORTED_DURATIONS.join(', ')} minutes`,
       );
     }
+  }
+
+  private buildMessagingEligibilityWhere(params: {
+    memberId?: string;
+    trainerId?: string;
+  }): Prisma.TrainerBookingWhereInput {
+    const supportWindowStart = this.getMessagingSupportWindowStart();
+
+    return {
+      ...(params.memberId ? { memberId: params.memberId } : {}),
+      ...(params.trainerId ? { trainerId: params.trainerId } : {}),
+      OR: [
+        {
+          status: TrainerBookingStatus.CONFIRMED,
+          endAt: { gte: supportWindowStart },
+        },
+        {
+          status: TrainerBookingStatus.COMPLETED,
+          endAt: { gte: supportWindowStart },
+        },
+      ],
+    };
+  }
+
+  private getMessagingSupportWindowStart(now: Date = new Date()): Date {
+    return new Date(
+      now.getTime() -
+        TRAINER_BOOKING_MESSAGE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+  }
+
+  private deduplicateMessagingContacts(
+    contacts: TrainerMessagingEligibleContact[],
+  ): TrainerMessagingEligibleContact[] {
+    const byId = new Map<string, TrainerMessagingEligibleContact>();
+
+    for (const contact of contacts) {
+      if (!byId.has(contact.id)) {
+        byId.set(contact.id, contact);
+      }
+    }
+
+    return [...byId.values()];
   }
 
   private async runSerializableRetry<T>(

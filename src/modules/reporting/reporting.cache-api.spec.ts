@@ -16,16 +16,16 @@ function createMemoryCache() {
   const store = new Map<string, CacheRecord>();
 
   return {
-    get: jest.fn(async (key: string) => store.get(key)?.value),
-    set: jest.fn(async (key: string, value: unknown, ttl?: number) => {
+    get: jest.fn((key: string) => store.get(key)?.value),
+    set: jest.fn((key: string, value: unknown, ttl?: number) => {
       store.set(key, { value, ttl });
     }),
-    mdel: jest.fn(async (keys: string[]) => {
+    mdel: jest.fn((keys: string[]) => {
       for (const key of keys) {
         store.delete(key);
       }
     }),
-    disconnect: jest.fn(async () => undefined),
+    disconnect: jest.fn(() => undefined),
   };
 }
 

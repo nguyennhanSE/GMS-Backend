@@ -140,26 +140,17 @@ describe('Auth Integration (e2e)', () => {
 
   /** Helper: POST /auth/login */
   function postLogin(body: Record<string, unknown>) {
-    return supertest
-      .default(app.getHttpServer())
-      .post('/auth/login')
-      .send(body);
+    return supertest.default(app.getHttpServer()).post('/auth/login').send(body);
   }
 
   /** Helper: POST /auth/refresh-token */
   function postRefresh(body: Record<string, unknown>) {
-    return supertest
-      .default(app.getHttpServer())
-      .post('/auth/refresh-token')
-      .send(body);
+    return supertest.default(app.getHttpServer()).post('/auth/refresh-token').send(body);
   }
 
   /** Helper: POST /auth/logout */
   function postLogout(body: Record<string, unknown>) {
-    return supertest
-      .default(app.getHttpServer())
-      .post('/auth/logout')
-      .send(body);
+    return supertest.default(app.getHttpServer()).post('/auth/logout').send(body);
   }
 
   // ─── Scope 1: Login ────────────────────────────────────────────────

@@ -17,6 +17,11 @@ describe('ClassBookingService', () => {
   let prismaService: jest.Mocked<PrismaService>;
   let classBookingRepository: jest.Mocked<ClassBookingRepository>;
   let appCacheService: jest.Mocked<Pick<AppCacheService, 'invalidateTags'>>;
+  let updateBooking: jest.Mock;
+  let getBookingsByUserId: jest.Mock;
+  let getBookingsByClassScheduleId: jest.Mock;
+  let deleteBooking: jest.Mock;
+  let invalidateCacheTags: jest.Mock;
 
   // Mock schedule with new schema structure
   const mockSchedule = {
@@ -52,8 +57,14 @@ describe('ClassBookingService', () => {
   };
 
   beforeEach(async () => {
+    updateBooking = jest.fn();
+    getBookingsByUserId = jest.fn();
+    getBookingsByClassScheduleId = jest.fn();
+    deleteBooking = jest.fn();
+    invalidateCacheTags = jest.fn();
+
     appCacheService = {
-      invalidateTags: jest.fn(),
+      invalidateTags: invalidateCacheTags,
     };
 
     const mockPrismaService = {
@@ -77,10 +88,10 @@ describe('ClassBookingService', () => {
     const mockRepository = {
       getPaginate: jest.fn(),
       getById: jest.fn(),
-      getByUserId: jest.fn(),
-      getByClassScheduleId: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
+      getByUserId: getBookingsByUserId,
+      getByClassScheduleId: getBookingsByClassScheduleId,
+      update: updateBooking,
+      delete: deleteBooking,
     };
 
     const mockClassScheduleService = {
@@ -352,7 +363,7 @@ describe('ClassBookingService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].status).toBe('pending');
-      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',
           'class-schedule:trainer:trainer-1',
@@ -394,10 +405,10 @@ describe('ClassBookingService', () => {
       const result = await service.cancel('booking-1', 'user-1', false);
 
       expect(result.status).toBe('cancelled');
-      expect(classBookingRepository.update).toHaveBeenCalledWith('booking-1', {
+      expect(updateBooking).toHaveBeenCalledWith('booking-1', {
         status: 'cancelled',
       });
-      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',
           'trainer:availability:trainer-1',
@@ -460,7 +471,7 @@ describe('ClassBookingService', () => {
       const result = await service.findByUserId('user-1');
 
       expect(result).toEqual([mockBooking]);
-      expect(classBookingRepository.getByUserId).toHaveBeenCalledWith('user-1');
+      expect(getBookingsByUserId).toHaveBeenCalledWith('user-1');
     });
   });
 
@@ -473,7 +484,7 @@ describe('ClassBookingService', () => {
       const result = await service.findByClassScheduleId('schedule-1');
 
       expect(result).toEqual([mockBooking]);
-      expect(classBookingRepository.getByClassScheduleId).toHaveBeenCalledWith(
+      expect(getBookingsByClassScheduleId).toHaveBeenCalledWith(
         'schedule-1',
       );
     });
@@ -493,7 +504,7 @@ describe('ClassBookingService', () => {
       const result = await service.update('booking-1', { status: 'confirmed' });
 
       expect(result.status).toBe('confirmed');
-      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',
           'trainer:availability:trainer-1',
@@ -515,8 +526,8 @@ describe('ClassBookingService', () => {
       expect(result).toEqual({
         message: 'Class booking booking-1 deleted successfully',
       });
-      expect(classBookingRepository.delete).toHaveBeenCalledWith('booking-1');
-      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect(deleteBooking).toHaveBeenCalledWith('booking-1');
+      expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',
           'trainer:availability:trainer-1',

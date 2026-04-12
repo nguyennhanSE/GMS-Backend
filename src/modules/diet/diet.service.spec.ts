@@ -235,12 +235,12 @@ describe('DietService', () => {
 
     let currentPlan = plan;
     const tx = makeTransactionClient();
-    tx.dietPlan.update.mockImplementation(async () => {
+    tx.dietPlan.update.mockImplementation(() => {
       currentPlan = updatedPlan;
       return updatedPlan;
     });
-    prisma.dietPlan.findUnique.mockImplementation(async () => currentPlan);
-    prisma.$transaction.mockImplementation(async (callback: any) => callback(tx));
+    prisma.dietPlan.findUnique.mockImplementation(() => currentPlan);
+    prisma.$transaction.mockImplementation((callback: any) => callback(tx));
 
     const result = await service.updateDietPlan('plan-1', trainerUser, {
       status: DietPlanStatus.ACTIVE,
@@ -276,12 +276,12 @@ describe('DietService', () => {
 
     let currentPlan = plan;
     const tx = makeTransactionClient();
-    tx.dietPlan.update.mockImplementation(async () => {
+    tx.dietPlan.update.mockImplementation(() => {
       currentPlan = updatedPlan;
       return updatedPlan;
     });
-    prisma.dietPlan.findUnique.mockImplementation(async () => currentPlan);
-    prisma.$transaction.mockImplementation(async (callback: any) => callback(tx));
+    prisma.dietPlan.findUnique.mockImplementation(() => currentPlan);
+    prisma.$transaction.mockImplementation((callback: any) => callback(tx));
 
     const result = await service.updateDietPlan('plan-1', trainerUser, {
       title: 'Lean Bulk Daily Plan Updated',
@@ -330,7 +330,7 @@ describe('DietService', () => {
       .mockResolvedValueOnce(plan)
       .mockResolvedValueOnce(updatedPlan);
     prisma.user.findMany.mockResolvedValue([{ id: memberUser.id }]);
-    prisma.$transaction.mockImplementation(async (callback: any) =>
+    prisma.$transaction.mockImplementation((callback: any) =>
       callback(tx),
     );
     trainerService.findActiveTrainerClientLink.mockResolvedValue({
@@ -427,7 +427,7 @@ describe('DietService', () => {
     const tx = makeTransactionClient();
     tx.dietPlan.create.mockResolvedValue(clonedPlan);
     prisma.dietPlan.findUnique.mockResolvedValue(sourcePlan);
-    prisma.$transaction.mockImplementation(async (callback: any) =>
+    prisma.$transaction.mockImplementation((callback: any) =>
       callback(tx),
     );
 
@@ -481,7 +481,7 @@ describe('DietService', () => {
     prisma.dietPlan.findUnique
       .mockResolvedValueOnce(plan)
       .mockResolvedValueOnce(archivedPlan);
-    prisma.$transaction.mockImplementation(async (callback: any) =>
+    prisma.$transaction.mockImplementation((callback: any) =>
       callback(tx),
     );
 

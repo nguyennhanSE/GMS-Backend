@@ -68,7 +68,7 @@ export class DietService {
     const isAdminOrStaff =
       user.roles.includes(ERoleName.ADMIN) || user.roles.includes(ERoleName.STAFF);
 
-    const where = await this.buildListWhere(user, query, includeArchived);
+    const where = this.buildListWhere(user, query, includeArchived);
     const [plans, totalDocs] = await Promise.all([
       this.prisma.dietPlan.findMany({
         where,
@@ -424,11 +424,11 @@ export class DietService {
     return this.mapTrainerPlanDetail(clonedPlan);
   }
 
-  private async buildListWhere(
+  private buildListWhere(
     user: RequestUser,
     query: DietPlanQueryDto,
     includeArchived: boolean,
-  ): Promise<Prisma.DietPlanWhereInput> {
+  ): Prisma.DietPlanWhereInput {
     const statusFilter = query.status
       ? { status: query.status }
       : includeArchived

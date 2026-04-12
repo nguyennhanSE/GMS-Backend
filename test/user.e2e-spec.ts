@@ -480,7 +480,7 @@ describe('User Module Integration (e2e)', () => {
     });
 
     it('rejects invalid tokens on the verification landing page', async () => {
-      const maliciousToken = '\"><script>alert("xss")</script>';
+      const maliciousToken = '"><script>alert("xss")</script>';
       const response = await supertest
         .default(app.getHttpServer())
         .get('/user/verify-email')

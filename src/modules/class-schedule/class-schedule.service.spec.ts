@@ -14,6 +14,15 @@ describe('ClassScheduleService', () => {
     remember: jest.Mock;
     invalidateTags: jest.Mock;
   };
+  let checkScheduleConflict: jest.Mock;
+  let createSchedule: jest.Mock;
+  let deleteSchedule: jest.Mock;
+  let getConflictingSchedules: jest.Mock;
+  let getSchedulesByDayOfWeek: jest.Mock;
+  let getSchedulesByTrainerId: jest.Mock;
+  let rememberCache: jest.Mock;
+  let invalidateCacheTags: jest.Mock;
+  let isWithinWorkingHours: jest.Mock;
 
   // Mock schedule with new schema structure (supports multi-day via scheduleDays)
   const mockSchedule = {
@@ -53,25 +62,37 @@ describe('ClassScheduleService', () => {
   };
 
   beforeEach(async () => {
+    checkScheduleConflict = jest.fn();
+    createSchedule = jest.fn();
+    deleteSchedule = jest.fn();
+    getConflictingSchedules = jest.fn();
+    getSchedulesByDayOfWeek = jest.fn();
+    getSchedulesByTrainerId = jest.fn();
+    rememberCache = jest.fn((_key, loader) => loader());
+    invalidateCacheTags = jest.fn();
+    isWithinWorkingHours = jest
+      .fn()
+      .mockResolvedValue({ withinHours: true });
+
     const mockRepository = {
       getById: jest.fn(),
-      create: jest.fn(),
+      create: createSchedule,
       update: jest.fn(),
-      delete: jest.fn(),
+      delete: deleteSchedule,
       getPaginate: jest.fn(),
-      getByDayOfWeek: jest.fn(),
-      getByTrainerId: jest.fn(),
-      checkScheduleConflict: jest.fn(),
-      getConflictingSchedules: jest.fn(),
+      getByDayOfWeek: getSchedulesByDayOfWeek,
+      getByTrainerId: getSchedulesByTrainerId,
+      checkScheduleConflict: checkScheduleConflict,
+      getConflictingSchedules: getConflictingSchedules,
     };
 
     trainerService = {
-      isWithinWorkingHours: jest.fn().mockResolvedValue({ withinHours: true }),
+      isWithinWorkingHours: isWithinWorkingHours,
     };
 
     appCacheService = {
-      remember: jest.fn((_key, loader) => loader()),
-      invalidateTags: jest.fn(),
+      remember: rememberCache,
+      invalidateTags: invalidateCacheTags,
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -105,21 +126,21 @@ describe('ClassScheduleService', () => {
       const result = await service.create(mockCreateDto);
 
       // Assert
-      expect(repository.checkScheduleConflict).toHaveBeenCalledWith(
+      expect(checkScheduleConflict).toHaveBeenCalledWith(
         'trainer-1',
         'MON',
         mockCreateDto.startTime,
         mockCreateDto.endTime,
       );
-      expect(trainerService.isWithinWorkingHours).toHaveBeenCalledWith(
+      expect(isWithinWorkingHours).toHaveBeenCalledWith(
         'trainer-1',
         DayOfWeekDto.MON,
         mockCreateDto.startTime,
         mockCreateDto.endTime,
       );
-      expect(repository.create).toHaveBeenCalledWith(mockCreateDto);
+      expect(createSchedule).toHaveBeenCalledWith(mockCreateDto);
       expect(result).toEqual(mockSchedule);
-      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:list',
           'class-schedule:detail',
@@ -199,7 +220,7 @@ describe('ClassScheduleService', () => {
       await service.create(tuesdayDto);
 
       // Assert
-      expect(repository.checkScheduleConflict).toHaveBeenCalledWith(
+      expect(checkScheduleConflict).toHaveBeenCalledWith(
         'trainer-1',
         'TUE',
         mockCreateDto.startTime,
@@ -223,7 +244,7 @@ describe('ClassScheduleService', () => {
       });
 
       // Assert
-      expect(repository.checkScheduleConflict).not.toHaveBeenCalled();
+      expect(checkScheduleConflict).not.toHaveBeenCalled();
       expect(result.location).toBe('Studio B');
     });
 
@@ -241,7 +262,7 @@ describe('ClassScheduleService', () => {
       await service.update('schedule-1', { startTime: newStartTime });
 
       // Assert
-      expect(repository.checkScheduleConflict).toHaveBeenCalledWith(
+      expect(checkScheduleConflict).toHaveBeenCalledWith(
         'trainer-1',
         'MON',
         newStartTime,
@@ -264,7 +285,7 @@ describe('ClassScheduleService', () => {
       await service.update('schedule-1', { endTime: newEndTime });
 
       // Assert
-      expect(repository.checkScheduleConflict).toHaveBeenCalledWith(
+      expect(checkScheduleConflict).toHaveBeenCalledWith(
         'trainer-1',
         'MON',
         mockSchedule.startTime,
@@ -286,7 +307,7 @@ describe('ClassScheduleService', () => {
       await service.update('schedule-1', { dayOfWeek: DayOfWeekDto.TUE });
 
       // Assert
-      expect(repository.checkScheduleConflict).toHaveBeenCalledWith(
+      expect(checkScheduleConflict).toHaveBeenCalledWith(
         'trainer-1',
         'TUE',
         mockSchedule.startTime,
@@ -308,14 +329,14 @@ describe('ClassScheduleService', () => {
       await service.update('schedule-1', { trainerId: 'trainer-2' });
 
       // Assert
-      expect(repository.checkScheduleConflict).toHaveBeenCalledWith(
+      expect(checkScheduleConflict).toHaveBeenCalledWith(
         'trainer-2',
         'MON',
         mockSchedule.startTime,
         mockSchedule.endTime,
         'schedule-1',
       );
-      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',
           'class-schedule:trainer:trainer-1',
@@ -410,7 +431,7 @@ describe('ClassScheduleService', () => {
       );
 
       // Assert
-      expect(repository.getConflictingSchedules).toHaveBeenCalledWith(
+      expect(getConflictingSchedules).toHaveBeenCalledWith(
         'trainer-1',
         'MON',
         expect.any(Date),
@@ -430,7 +451,7 @@ describe('ClassScheduleService', () => {
 
       // Assert
       expect(result).toEqual(mockSchedule);
-      expect(appCacheService.remember).toHaveBeenCalledWith(
+      expect(rememberCache).toHaveBeenCalledWith(
         'gms:class-schedule:detail:schedule-1',
         expect.any(Function),
         expect.objectContaining({
@@ -462,8 +483,8 @@ describe('ClassScheduleService', () => {
 
       // Assert
       expect(result.message).toContain('deleted successfully');
-      expect(repository.delete).toHaveBeenCalledWith('schedule-1');
-      expect(appCacheService.invalidateTags).toHaveBeenCalledWith(
+      expect(deleteSchedule).toHaveBeenCalledWith('schedule-1');
+      expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',
           'class-schedule:trainer:trainer-1',
@@ -483,8 +504,8 @@ describe('ClassScheduleService', () => {
 
       // Assert
       expect(result).toEqual([mockSchedule]);
-      expect(repository.getByDayOfWeek).toHaveBeenCalledWith('MON');
-      expect(appCacheService.remember).toHaveBeenCalledWith(
+      expect(getSchedulesByDayOfWeek).toHaveBeenCalledWith('MON');
+      expect(rememberCache).toHaveBeenCalledWith(
         'gms:class-schedule:day:MON',
         expect.any(Function),
         expect.objectContaining({
@@ -505,8 +526,8 @@ describe('ClassScheduleService', () => {
 
       // Assert
       expect(result).toEqual([mockSchedule]);
-      expect(repository.getByTrainerId).toHaveBeenCalledWith('trainer-1');
-      expect(appCacheService.remember).toHaveBeenCalledWith(
+      expect(getSchedulesByTrainerId).toHaveBeenCalledWith('trainer-1');
+      expect(rememberCache).toHaveBeenCalledWith(
         'gms:class-schedule:trainer:trainer-1',
         expect.any(Function),
         expect.objectContaining({

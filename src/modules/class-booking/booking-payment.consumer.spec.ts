@@ -150,7 +150,7 @@ describe('BookingPaymentConsumer', () => {
     });
 
     it('should not emit a local notification event when booking state did not change', async () => {
-      const payload = createPayload({ status: 'FAILED' as any });
+      const payload = createPayload({ status: 'FAILED' });
       classBookingService.cancelByPayment.mockResolvedValue(null);
 
       await consumer.handlePaymentFailed(payload, createContext());
@@ -162,7 +162,7 @@ describe('BookingPaymentConsumer', () => {
 
   describe('handlePaymentRefunded', () => {
     it('should cancel booking and ack on success', async () => {
-      const payload = createPayload({ status: 'REFUNDED' as any });
+      const payload = createPayload({ status: 'REFUNDED' });
       classBookingService.cancelByPayment.mockResolvedValue({
         id: 'booking-1',
         status: 'cancelled',
@@ -179,7 +179,7 @@ describe('BookingPaymentConsumer', () => {
     });
 
     it('should nack to DLQ on transient error (refund path)', async () => {
-      const payload = createPayload({ status: 'REFUNDED' as any });
+      const payload = createPayload({ status: 'REFUNDED' });
       classBookingService.cancelByPayment.mockRejectedValue(
         new Error('DB timeout'),
       );

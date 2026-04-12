@@ -215,8 +215,7 @@ describe('MembershipsService', () => {
       const expectedEnd = new Date('2027-06-01');
 
       // $transaction executes the callback with a tx client
-      prisma.$transaction.mockImplementation(async (cb: Function) => {
-        const tx = {
+      const tx = {
           userMembership: {
             findFirst: jest
               .fn()
@@ -233,8 +232,9 @@ describe('MembershipsService', () => {
             create: jest.fn(),
           },
         };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        (cb: (client: typeof tx) => unknown) => cb(tx),
+      );
 
       const result = await service.activateByPayment(
         'pay-1',
@@ -248,8 +248,7 @@ describe('MembershipsService', () => {
     it('should soft-expire different-tier and create new', async () => {
       prisma.membership.findUnique.mockResolvedValue(mockMembership);
 
-      prisma.$transaction.mockImplementation(async (cb: Function) => {
-        const tx = {
+      const tx = {
           userMembership: {
             findFirst: jest
               .fn()
@@ -268,8 +267,9 @@ describe('MembershipsService', () => {
             }),
           },
         };
-        return cb(tx);
-      });
+      prisma.$transaction.mockImplementation(
+        (cb: (client: typeof tx) => unknown) => cb(tx),
+      );
 
       const result = await service.activateByPayment(
         'pay-1',

@@ -234,7 +234,7 @@ describe('WorkoutService', () => {
       ],
     });
 
-    prisma.$transaction.mockImplementation(async (callback: any) =>
+    prisma.$transaction.mockImplementation((callback: any) =>
       callback({
         workoutPlan: {
           create: transactionCreate,

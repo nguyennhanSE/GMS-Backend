@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { OpenAPIObject } from '@nestjs/swagger';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { config, NODE_ENV } from './libs/config';
 import { TransformInterceptor } from './libs/interceptor/response.interceptor';
@@ -10,7 +11,7 @@ import { PAYMENT_QUEUE } from './modules/payment/constants/payment.constants';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
-  let swaggerConfig;
+  let swaggerConfig: Omit<OpenAPIObject, 'paths'> | undefined;
 
   if (NODE_ENV === 'development') {
     swaggerConfig = new DocumentBuilder()
@@ -98,4 +99,4 @@ async function bootstrap() {
   });
 }
 
-bootstrap();
+void bootstrap();

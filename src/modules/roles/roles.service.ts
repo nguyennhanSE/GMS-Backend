@@ -111,18 +111,18 @@ export class RolesService {
       throw new NotFoundException(`Role with ID '${id}' not found`);
     }
 
-    const userRoles = (role as any).userRole || [];
+    const userRoles = role.userRole ?? [];
 
     return {
       id: role.id,
       name: role.name,
       description: role.description,
       userCount: userRoles.length,
-      users: userRoles.map((ur: any) => ({
-        id: ur.user.id,
-        name: toDisplayName(ur.user),
-        email: ur.user.email,
-        assignedAt: ur.createdAt,
+      users: userRoles.map((userRole) => ({
+        id: userRole.user.id,
+        name: toDisplayName(userRole.user),
+        email: userRole.user.email,
+        assignedAt: userRole.createdAt,
       })),
       createdAt: role.createdAt,
       updatedAt: role.updatedAt,
@@ -296,12 +296,12 @@ export class RolesService {
         name: role.name,
         description: role.description,
       },
-      users: userRoles.map((ur: any) => ({
-        id: ur.user.id,
-        name: toDisplayName(ur.user),
-        email: ur.user.email,
-        phoneNumber: ur.user.phone,
-        assignedAt: ur.createdAt,
+      users: userRoles.map((userRole) => ({
+        id: userRole.user.id,
+        name: toDisplayName(userRole.user),
+        email: userRole.user.email,
+        phoneNumber: userRole.user.phone,
+        assignedAt: userRole.createdAt,
       })),
       pagination: {
         page,

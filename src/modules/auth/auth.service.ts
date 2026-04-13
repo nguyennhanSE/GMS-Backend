@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, UnauthorizedException, NotFoundException } from "@nestjs/common";
+import type { JwtSignOptions } from "@nestjs/jwt";
 import {
     LoginDto,
     LogoutDto,
@@ -13,6 +14,8 @@ import { AuthRepository } from "./repositories/auth.repository";
 import { comparePassword } from "src/utils/encrypt";
 import { UserService } from "../user/user.service";
 import { AppLogger } from "src/libs/logger";
+
+type JwtExpiresIn = NonNullable<JwtSignOptions["expiresIn"]>;
 
 @Injectable()
 export class AuthService {
@@ -45,6 +48,17 @@ export class AuthService {
         } catch {
             throw new UnauthorizedException("Invalid refresh token");
         }
+    }
+
+    private buildJwtSignOptions(secret: string, expiresIn: string): JwtSignOptions {
+        return {
+            secret,
+            expiresIn: this.parseJwtExpiresIn(expiresIn),
+        };
+    }
+
+    private parseJwtExpiresIn(expiresIn: string): JwtExpiresIn {
+        return expiresIn as JwtExpiresIn;
     }
 
     async registerMember(dto: RegisterMemberDto) {
@@ -110,16 +124,18 @@ export class AuthService {
             const refreshExpiry = rememberMe
                 ? config.REFRESH_TOKEN_REMEMBER_EXPIRES_IN
                 : config.REFRESH_TOKEN_EXPIRES_IN;
+            const accessTokenOptions = this.buildJwtSignOptions(
+                config.JWT_SECRET_ACCESS_TOKEN,
+                config.ACCESS_TOKEN_EXPIRES_IN,
+            );
+            const refreshTokenOptions = this.buildJwtSignOptions(
+                config.JWT_SECRET_REFRESH_TOKEN,
+                refreshExpiry,
+            );
 
             const [accessToken, refreshToken] = await Promise.all([
-                this.authRepository.generateToken(accessTokenPayload, {
-                    secret: config.JWT_SECRET_ACCESS_TOKEN,
-                    expiresIn: config.ACCESS_TOKEN_EXPIRES_IN,
-                } as any),
-                this.authRepository.generateToken(refreshTokenPayload, {
-                    secret: config.JWT_SECRET_REFRESH_TOKEN,
-                    expiresIn: refreshExpiry,
-                } as any),
+                this.authRepository.generateToken(accessTokenPayload, accessTokenOptions),
+                this.authRepository.generateToken(refreshTokenPayload, refreshTokenOptions),
             ]);
 
             this.logger.debug(`[${this.context}] login tokens issued`, {
@@ -242,16 +258,18 @@ export class AuthService {
                 email: user.email,
                 roles
             };
+            const accessTokenOptions = this.buildJwtSignOptions(
+                config.JWT_SECRET_ACCESS_TOKEN,
+                config.ACCESS_TOKEN_EXPIRES_IN,
+            );
+            const refreshTokenOptions = this.buildJwtSignOptions(
+                config.JWT_SECRET_REFRESH_TOKEN,
+                config.REFRESH_TOKEN_EXPIRES_IN,
+            );
 
             const [accessToken, newRefreshToken] = await Promise.all([
-                this.authRepository.generateToken(accessTokenPayload, {
-                    secret: config.JWT_SECRET_ACCESS_TOKEN,
-                    expiresIn: config.ACCESS_TOKEN_EXPIRES_IN,
-                } as any),
-                this.authRepository.generateToken(refreshTokenPayload, {
-                    secret: config.JWT_SECRET_REFRESH_TOKEN,
-                    expiresIn: config.REFRESH_TOKEN_EXPIRES_IN,
-                } as any),
+                this.authRepository.generateToken(accessTokenPayload, accessTokenOptions),
+                this.authRepository.generateToken(refreshTokenPayload, refreshTokenOptions),
             ]);
 
             this.logger.debug(`[${this.context}] refreshToken new tokens`, {
@@ -308,16 +326,17 @@ export class AuthService {
                 email: email || user.email,
                 roles,
             };
-
+            const accessTokenOptions = this.buildJwtSignOptions(
+                config.JWT_SECRET_ACCESS_TOKEN,
+                config.ACCESS_TOKEN_EXPIRES_IN,
+            );
+            const refreshTokenOptions = this.buildJwtSignOptions(
+                config.JWT_SECRET_REFRESH_TOKEN,
+                config.REFRESH_TOKEN_EXPIRES_IN,
+            );
             const [accessToken, refreshToken] = await Promise.all([
-                this.authRepository.generateToken(accessTokenPayload, {
-                    secret: config.JWT_SECRET_ACCESS_TOKEN,
-                    expiresIn: config.ACCESS_TOKEN_EXPIRES_IN,
-                } as any),
-                this.authRepository.generateToken(refreshTokenPayload, {
-                    secret: config.JWT_SECRET_REFRESH_TOKEN,
-                    expiresIn: config.REFRESH_TOKEN_EXPIRES_IN,
-                } as any),
+                this.authRepository.generateToken(accessTokenPayload, accessTokenOptions),
+                this.authRepository.generateToken(refreshTokenPayload, refreshTokenOptions),
             ]);
 
             if (refreshToken) {

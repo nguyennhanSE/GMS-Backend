@@ -26,8 +26,39 @@ import {
 } from './dto/diet-plan.dto';
 import { DietPlanQueryDto } from './dto/diet-plan-query.dto';
 
-type DietPlanRecord = any;
-type DietPlanAssignmentRecord = any;
+const dietPlanDetailInclude = Prisma.validator<Prisma.DietPlanInclude>()({
+  trainer: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+    },
+  },
+  meals: {
+    orderBy: [{ sequence: 'asc' as const }],
+  },
+  assignments: {
+    include: {
+      member: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: [{ assignedAt: 'desc' as const }],
+  },
+});
+
+type DietPlanRecord = Prisma.DietPlanGetPayload<{
+  include: typeof dietPlanDetailInclude;
+}>;
+type DietPlanAssignmentRecord = DietPlanRecord['assignments'][number];
+type DietPlanMealRecord = DietPlanRecord['meals'][number];
+type DietPlanUserRecord = NonNullable<DietPlanRecord['trainer']>;
 
 @Injectable()
 export class DietService {
@@ -256,7 +287,7 @@ export class DietService {
       include: this.planDetailInclude(),
     });
 
-    return this.mapTrainerPlanDetail(updated);
+    return this.mapTrainerPlanDetail(this.assertPlanExists(updated, id));
   }
 
   async updateDietPlanAssignment(
@@ -328,7 +359,7 @@ export class DietService {
       include: this.planDetailInclude(),
     });
 
-    return this.mapTrainerPlanDetail(updated);
+    return this.mapTrainerPlanDetail(this.assertPlanExists(updated, id));
   }
 
   async archiveDietPlan(id: string, user: RequestUser) {
@@ -403,7 +434,7 @@ export class DietService {
           status: DietPlanStatus.DRAFT,
           visibility: DietPlanVisibility.PRIVATE,
           meals: {
-            create: plan.meals.map((meal: any) => ({
+            create: plan.meals.map((meal) => ({
               sequence: meal.sequence,
               mealType: meal.mealType,
               mealTitle: meal.mealTitle,
@@ -540,17 +571,30 @@ export class DietService {
   }
 
   private async getOwnedPlanOrThrow(id: string, trainerId: string) {
+    const plan = await this.getPlanDetailOrThrow(id);
+
+    if (plan.trainerId !== trainerId) {
+      throw new ForbiddenException('You can only manage your own diet plans');
+    }
+
+    return plan;
+  }
+
+  private async getPlanDetailOrThrow(id: string): Promise<DietPlanRecord> {
     const plan = await this.prisma.dietPlan.findUnique({
       where: { id },
       include: this.planDetailInclude(),
     });
 
+    return this.assertPlanExists(plan, id);
+  }
+
+  private assertPlanExists(
+    plan: DietPlanRecord | null,
+    id: string,
+  ): DietPlanRecord {
     if (!plan) {
       throw new NotFoundException(`Diet plan ${id} not found`);
-    }
-
-    if (plan.trainerId !== trainerId) {
-      throw new ForbiddenException('You can only manage your own diet plans');
     }
 
     return plan;
@@ -678,7 +722,7 @@ export class DietService {
     };
   }
 
-  private mapMeals(meals: any[]) {
+  private mapMeals(meals: DietPlanMealRecord[]) {
     return meals.map((meal) => ({
       id: meal.id,
       dietPlanId: meal.dietPlanId,
@@ -716,7 +760,7 @@ export class DietService {
     };
   }
 
-  private mapTrainer(trainer: any) {
+  private mapTrainer(trainer: DietPlanUserRecord) {
     return {
       id: trainer.id,
       firstName: trainer.firstName,
@@ -772,31 +816,6 @@ export class DietService {
   }
 
   private planDetailInclude() {
-    return {
-      trainer: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-        },
-      },
-      meals: {
-        orderBy: [{ sequence: 'asc' as const }],
-      },
-      assignments: {
-        include: {
-          member: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: [{ assignedAt: 'desc' as const }],
-      },
-    };
+    return dietPlanDetailInclude;
   }
 }

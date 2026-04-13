@@ -23,7 +23,7 @@ import { ClassScheduleService } from '../class-schedule/class-schedule.service';
 import { ScheduleExceptionService } from '../class-schedule/schedule-exception.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
-import { Prisma } from '@prisma/client';
+import { DayOfWeek, Prisma } from '@prisma/client';
 import { BOOKING_STATUS } from './constants/booking-status.constants';
 import { AppCacheService } from '../../libs/cache/cache.service';
 import { buildClassScheduleInvalidationTags } from '../class-schedule/class-schedule.cache';
@@ -116,17 +116,23 @@ export class ClassBookingService {
   /**
    * Convert JS day number to DayOfWeek enum string for error messages
    */
-  private numberToDayOfWeek(dayNumber: number): string {
-    const mapping: Record<number, string> = {
-      0: 'SUN',
-      1: 'MON',
-      2: 'TUE',
-      3: 'WED',
-      4: 'THU',
-      5: 'FRI',
-      6: 'SAT',
+  private numberToDayOfWeek(dayNumber: number): DayOfWeek {
+    const mapping: Record<number, DayOfWeek> = {
+      0: DayOfWeek.SUN,
+      1: DayOfWeek.MON,
+      2: DayOfWeek.TUE,
+      3: DayOfWeek.WED,
+      4: DayOfWeek.THU,
+      5: DayOfWeek.FRI,
+      6: DayOfWeek.SAT,
     };
-    return mapping[dayNumber] ?? 'UNKNOWN';
+    const dayOfWeek = mapping[dayNumber];
+    if (!dayOfWeek) {
+      throw new BadRequestException(
+        `Invalid booking day value: ${dayNumber}`,
+      );
+    }
+    return dayOfWeek;
   }
 
   /**
@@ -196,7 +202,14 @@ export class ClassBookingService {
           // Get the schedule with lock acquired, including gymClass relation
           const classSchedule = await tx.classSchedule.findUnique({
             where: { id: scheduleId },
-            include: { gymClass: true },
+            include: {
+              gymClass: true,
+              scheduleDays: {
+                select: {
+                  dayOfWeek: true,
+                },
+              },
+            },
           });
 
           if (!classSchedule) {
@@ -228,17 +241,12 @@ export class ClassBookingService {
           const bookingDayOfWeek = bookingDate.getUTCDay(); // 0=Sun, 1=Mon, etc.
 
           // Get schedule days - prefer scheduleDays, fall back to legacy dayOfWeek
-          const scheduleDaysOfWeek: string[] = [];
-          if (
-            (classSchedule as any).scheduleDays &&
-            (classSchedule as any).scheduleDays.length > 0
-          ) {
-            for (const sd of (classSchedule as any).scheduleDays) {
-              scheduleDaysOfWeek.push(sd.dayOfWeek);
-            }
-          } else if (classSchedule.dayOfWeek) {
-            scheduleDaysOfWeek.push(classSchedule.dayOfWeek);
-          }
+          const scheduleDaysOfWeek =
+            classSchedule.scheduleDays?.length
+              ? classSchedule.scheduleDays.map((scheduleDay) => scheduleDay.dayOfWeek)
+              : classSchedule.dayOfWeek
+                ? [classSchedule.dayOfWeek]
+                : [];
 
           // Check if booking day matches any schedule day
           const bookingDayName = this.numberToDayOfWeek(bookingDayOfWeek);

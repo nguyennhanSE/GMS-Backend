@@ -26,6 +26,34 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
   let testData: TestData;
   let adminToken: string;
   let memberToken: string;
+  const tempUserEmailPrefixes = [
+    'cap-test-',
+    'full-test-',
+    'cancel-cap-',
+    'slot-test-',
+    'date-a-',
+    'date-b-',
+  ];
+
+  async function cleanupRecurringBookingTempUsers(): Promise<void> {
+    const userEmailFilters = tempUserEmailPrefixes.map((prefix) => ({
+      email: { contains: prefix },
+    }));
+
+    await prisma.classBooking.deleteMany({
+      where: {
+        user: {
+          OR: userEmailFilters,
+        },
+      },
+    });
+
+    await prisma.user.deleteMany({
+      where: {
+        OR: userEmailFilters,
+      },
+    });
+  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -45,6 +73,7 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
     prisma = app.get(PrismaService);
 
     await cleanupTestData(prisma);
+    await cleanupRecurringBookingTempUsers();
     testData = await createTestData(prisma);
     adminToken = await loginAs(
       app,
@@ -59,11 +88,13 @@ describe('Recurring Booking Fixes & Remaining Slots (e2e)', () => {
   }, 60000);
 
   afterAll(async () => {
+    await cleanupRecurringBookingTempUsers();
     await cleanupTestData(prisma);
     await app.close();
   });
 
   afterEach(async () => {
+    await cleanupRecurringBookingTempUsers();
     await prisma.classBooking.deleteMany({
       where: { classScheduleId: testData.testSchedule.id },
     });

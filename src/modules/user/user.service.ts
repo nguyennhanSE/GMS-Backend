@@ -25,11 +25,13 @@ import { StorageService } from '../storage/storage.service';
 import { AppLogger } from '../../libs/logger';
 import { UserEmailService } from '../email/email.service';
 import { JwtService } from '@nestjs/jwt';
+import type { JwtSignOptions } from '@nestjs/jwt';
 import { config } from '../../libs/config';
 import { randomBytes } from 'crypto';
 import type { RegisterMemberDto } from '../auth/dto/auth.dto';
 
 type EmailVerificationMode = 'setup_password' | 'activate_only';
+type JwtExpiresIn = NonNullable<JwtSignOptions['expiresIn']>;
 
 type EmailVerificationTokenPayload = {
   sub: string;
@@ -79,7 +81,7 @@ export class UserService {
    * Default role is MEMBER if not provided
    */
   async create(createUserDto: CreateUserDto): Promise<UserEntity> {
-    const temporaryPasswordHash = await bcrypt.hash(
+    const temporaryPasswordHash: string = await bcrypt.hash(
       this.generateTemporaryPassword(),
       10,
     );
@@ -99,7 +101,10 @@ export class UserService {
       throw new BadRequestException('Password confirmation does not match');
     }
 
-    const hashedPassword = await bcrypt.hash(registerMemberDto.password, 10);
+    const hashedPassword: string = await bcrypt.hash(
+      registerMemberDto.password,
+      10,
+    );
     const { password, confirmPassword, ...memberData } = registerMemberDto;
 
     return this.createPendingVerificationUser(
@@ -297,6 +302,10 @@ export class UserService {
     user: UserEntity,
     mode: EmailVerificationMode,
   ): Promise<string> {
+    const signOptions = this.buildJwtSignOptions(
+      config.JWT_SECRET_ACCESS_TOKEN,
+      config.JWT_TOKEN_EXPIRATION_TIME,
+    );
     const token = await this.jwtService.signAsync(
       {
         sub: user.id,
@@ -304,10 +313,7 @@ export class UserService {
         purpose: UserService.EMAIL_VERIFICATION_PURPOSE,
         mode,
       } satisfies EmailVerificationTokenPayload,
-      {
-        secret: config.JWT_SECRET_ACCESS_TOKEN,
-        expiresIn: config.JWT_TOKEN_EXPIRATION_TIME as any,
-      },
+      signOptions,
     );
 
     const appHost = config.APP_HOST.replace(/\/+$/, '');
@@ -394,5 +400,16 @@ export class UserService {
 
   private generateTemporaryPassword(): string {
     return randomBytes(32).toString('hex');
+  }
+
+  private buildJwtSignOptions(secret: string, expiresIn: string): JwtSignOptions {
+    return {
+      secret,
+      expiresIn: this.parseJwtExpiresIn(expiresIn),
+    };
+  }
+
+  private parseJwtExpiresIn(expiresIn: string): JwtExpiresIn {
+    return expiresIn as JwtExpiresIn;
   }
 }

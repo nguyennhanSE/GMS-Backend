@@ -664,18 +664,28 @@ This is an automated message from Liflow Support System
     html: string;
     text: string;
   }): Promise<boolean> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     const timeoutPromise = new Promise<boolean>((resolve) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         this.logger.error(`Notification email timed out for ${data.to}`, {
           subject: data.subject,
         });
         resolve(false);
       }, UserEmailService.NOTIFICATION_EMAIL_TIMEOUT_MS);
+
+      timeoutId.unref?.();
     });
 
-    return Promise.race([
-      this.nodemailerService.sendEmail(data),
-      timeoutPromise,
-    ]);
+    try {
+      return await Promise.race([
+        this.nodemailerService.sendEmail(data),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 }

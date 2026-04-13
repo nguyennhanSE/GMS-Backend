@@ -3,6 +3,58 @@ import { HttpStatus } from '@nestjs/common';
 // errorMessage is a dictionary mapping these keys to human-readable messages.
 import { ErrorKey, errorMessage } from './error-message';
 
+type DetailErrorInput = string | {
+    message: string;
+    name?: string;
+    errors?: object;
+    code?: number;
+    codeName?: string;
+    keyPattern?: object;
+    keyValue?: object;
+};
+
+function isDetailErrorInput(value: unknown): value is DetailErrorInput {
+    if (typeof value === 'string') {
+        return true;
+    }
+
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    if (!('message' in value)) {
+        return false;
+    }
+
+    return typeof value.message === 'string';
+}
+
+function normalizeDetailErrorInput(value: unknown, fallbackMessage: string): DetailErrorInput {
+    if (isDetailErrorInput(value)) {
+        return value;
+    }
+
+    if (value instanceof Error) {
+        return {
+            message: value.message || fallbackMessage,
+            name: value.name,
+        };
+    }
+
+    if (value === null || value === undefined) {
+        return fallbackMessage;
+    }
+
+    return {
+        message: fallbackMessage,
+        errors: typeof value === 'object' ? value : { value },
+    };
+}
+
+function getErrorText(key: ErrorKey): string {
+    return String(errorMessage[key]);
+}
+
 // ===================================================================================
 // SECTION 1: CENTRALIZED MAPPING LOGIC
 // ===================================================================================
@@ -64,7 +116,7 @@ export class DetailError {
     public keyValue?: object;
 
     public constructor(
-        input: string | { message: string; name?: string; errors?: object; code?: number; codeName?: string; keyPattern?: object; keyValue?: object; },
+        input: DetailErrorInput,
     ) {
         // This constructor handles both simple string messages and complex error objects.
         if (typeof input === 'string') {
@@ -98,15 +150,16 @@ export abstract class BaseError extends Error {
         // The key parameter now strictly requires a value from the ErrorKey enum for type safety.
         key: ErrorKey,
         errorCode: string,
-        detail: string | { message: string; name?: string; errors?: object; code?: number; codeName?: string; keyPattern?: object; keyValue?: object; } = '',
+        detail: DetailErrorInput = '',
     ) {
         // Set the human-readable message from the centralized errorMessage dictionary.
-        super(errorMessage[key]);
+        const errorText = getErrorText(key);
+        super(errorText);
         // Restore the prototype chain.
         Object.setPrototypeOf(this, new.target.prototype);
         // Assign properties based on the constructor arguments.
         this.key = key;
-        this.text = errorMessage[key];
+        this.text = errorText;
         this.errorCode = errorCode;
         this.detail = new DetailError(detail || this.text);
 
@@ -148,8 +201,8 @@ export abstract class BaseError extends Error {
  */
 export class MsxError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorKey: ErrorKey, errorCode: string = '', detail: any = {}) {
-        super(errorKey, errorCode, detail);
+    public constructor(errorKey: ErrorKey, errorCode: string = '', detail: unknown = {}) {
+        super(errorKey, errorCode, normalizeDetailErrorInput(detail, getErrorText(errorKey)));
     }
 }
 
@@ -157,7 +210,7 @@ export class MsxError extends BaseError {
  * An error representing a validation failure.
  */
 export class ValidationException extends Error {
-    public constructor(public errorCode: string, public detail: any, message?: string) {
+    public constructor(public errorCode: string, public detail: unknown, message?: string) {
         super(message || errorCode); // Use errorCode as message if no custom message provided
         this.name = 'ValidationError';
     }
@@ -168,7 +221,7 @@ export class ValidationException extends Error {
  */
 export class DuplicateKeyError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.DUPLICATE_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.DUPLICATE_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.DUPLICATE_KEY))); }
 }
 
 /**
@@ -176,7 +229,7 @@ export class DuplicateKeyError extends BaseError {
  */
 export class UnknowError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.UNKNOW_ERR_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.UNKNOW_ERR_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.UNKNOW_ERR_KEY))); }
 }
 
 /**
@@ -184,7 +237,7 @@ export class UnknowError extends BaseError {
  */
 export class RequestInvalidError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.REQUEST_INVALID_ERR_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.REQUEST_INVALID_ERR_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.REQUEST_INVALID_ERR_KEY))); }
 }
 
 /**
@@ -192,7 +245,7 @@ export class RequestInvalidError extends BaseError {
  */
 export class EntityExistedError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.ENTITY_EXISTED_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.ENTITY_EXISTED_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.ENTITY_EXISTED_KEY))); }
 }
 
 /**
@@ -200,7 +253,7 @@ export class EntityExistedError extends BaseError {
  */
 export class DataProcessError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.DATA_PROCESS_ERR_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.DATA_PROCESS_ERR_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.DATA_PROCESS_ERR_KEY))); }
 }
 
 /**
@@ -208,7 +261,7 @@ export class DataProcessError extends BaseError {
  */
 export class EntityNotFoundError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.ENTITY_NOT_FOUND_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.ENTITY_NOT_FOUND_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.ENTITY_NOT_FOUND_KEY))); }
 }
 
 /**
@@ -216,7 +269,7 @@ export class EntityNotFoundError extends BaseError {
  */
 export class UserAlreadyExistsError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.USER_ALREADY_EXISTS_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.USER_ALREADY_EXISTS_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.USER_ALREADY_EXISTS_KEY))); }
 }
 
 /**
@@ -224,14 +277,14 @@ export class UserAlreadyExistsError extends BaseError {
  */
 export class LoginFailedError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.LOGIN_FAILED_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.LOGIN_FAILED_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.LOGIN_FAILED_KEY))); }
 }
 /**
  * A specific error for when a user fails to log in.
  */
 export class AuthenticationFailedError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.AUTHENTICATION_FAILED_KEY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.AUTHENTICATION_FAILED_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.AUTHENTICATION_FAILED_KEY))); }
 }
 
 /**
@@ -239,7 +292,7 @@ export class AuthenticationFailedError extends BaseError {
  */
 export class NotEmptyError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) { super(ErrorKey.NOT_EMPTY, errorCode, detail); }
+    public constructor(errorCode: string = '', detail: unknown = {}) { super(ErrorKey.NOT_EMPTY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.NOT_EMPTY))); }
 }
 
 /**
@@ -247,8 +300,8 @@ export class NotEmptyError extends BaseError {
  */
 export class ValueInvalidError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) {
-        super(ErrorKey.VALUE_INVALID_ERR_KEY, errorCode, detail);
+    public constructor(errorCode: string = '', detail: unknown = {}) {
+        super(ErrorKey.VALUE_INVALID_ERR_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.VALUE_INVALID_ERR_KEY)));
     }
 }
 
@@ -257,7 +310,7 @@ export class ValueInvalidError extends BaseError {
  */
 export class ConditionFailedError extends BaseError {
     public getStatusCode(): HttpStatus { return mapErrorKeyToHttpStatus(this.key); }
-    public constructor(errorCode: string = '', detail: any = {}) {
-        super(ErrorKey.CCONDITION_FAILED_ERR_KEY, errorCode, detail);
+    public constructor(errorCode: string = '', detail: unknown = {}) {
+        super(ErrorKey.CCONDITION_FAILED_ERR_KEY, errorCode, normalizeDetailErrorInput(detail, getErrorText(ErrorKey.CCONDITION_FAILED_ERR_KEY)));
     }
 }

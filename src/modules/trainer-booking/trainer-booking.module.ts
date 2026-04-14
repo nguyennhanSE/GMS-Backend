@@ -7,6 +7,11 @@ import { TrainerBookingController } from './trainer-booking.controller';
 import { TrainerBookingPaymentConsumer } from './trainer-booking.consumer';
 import { TrainerBookingRepository } from './repositories/trainer-booking.repository';
 import { TrainerBookingService } from './trainer-booking.service';
+import { config } from '../../libs/config';
+
+const trainerBookingCronProviders = config.RUN_BACKGROUND_WORKERS
+  ? [TrainerBookingExpiryCronService, TrainerBookingReminderCronService]
+  : [];
 
 @Module({
   imports: [PaymentModule],
@@ -14,8 +19,7 @@ import { TrainerBookingService } from './trainer-booking.service';
   providers: [
     TrainerBookingService,
     TrainerBookingRepository,
-    TrainerBookingExpiryCronService,
-    TrainerBookingReminderCronService,
+    ...trainerBookingCronProviders,
     PrismaService,
   ],
   exports: [TrainerBookingService, TrainerBookingRepository],

@@ -10,6 +10,10 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { RMQ_CLIENT_TOKEN, PAYMENT_QUEUE } from './constants/payment.constants';
 import { config } from '../../libs/config';
 
+const paymentCronProviders = config.RUN_BACKGROUND_WORKERS
+  ? [StalePaymentCronService]
+  : [];
+
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
@@ -35,7 +39,7 @@ import { config } from '../../libs/config';
     PaymentService,
     StripeService,
     PaymentProducer,
-    StalePaymentCronService,
+    ...paymentCronProviders,
     PrismaService,
   ],
   exports: [PaymentService],

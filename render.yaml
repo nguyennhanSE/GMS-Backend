@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: gms-backend-web
+    runtime: node
+    region: singapore
+    plan: starter
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npm run db:deploy
+    startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_RUNTIME_ROLE
+        value: web
+      - key: REDIS_ENABLED
+        value: "false"
+      - key: APP_HOST
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: RABBITMQ_URL
+        sync: false
+
+  - type: worker
+    name: gms-backend-worker
+    runtime: node
+    region: singapore
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_RUNTIME_ROLE
+        value: worker
+      - key: REDIS_ENABLED
+        value: "false"
+      - key: APP_HOST
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: RABBITMQ_URL
+        sync: false

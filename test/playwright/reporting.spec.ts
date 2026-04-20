@@ -3,11 +3,13 @@ import { PaymentStatus, PaymentTargetType } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  API_BASE_URL,
   createApiContext,
   loginAs,
   startTemporaryApiServer,
   type TemporaryApiServer,
 } from './api-helpers';
+import { isDeployedTarget } from './target-mode';
 
 type TestUserKey =
   | 'admin'
@@ -60,6 +62,7 @@ test.describe('Reporting Module Playwright API E2E', () => {
   let adminApi: APIRequestContext;
   let memberApi: APIRequestContext;
   let baselineSummary: SummarySnapshot;
+  let activeBaseUrl: string;
 
   test.beforeAll(async () => {
     await prisma.$connect();
@@ -67,10 +70,17 @@ test.describe('Reporting Module Playwright API E2E', () => {
     baselineSummary = await getSummaryBaseline();
     await seedReportingFixtures();
 
-    temporaryServer = await startTemporaryApiServer({
-      REDIS_ENABLED: '0',
-    });
-    anonymousApi = await createApiContext(undefined, temporaryServer.baseURL);
+    if (isDeployedTarget()) {
+      activeBaseUrl = API_BASE_URL;
+      anonymousApi = await createApiContext(undefined, activeBaseUrl);
+    } else {
+      temporaryServer = await startTemporaryApiServer({
+        REDIS_ENABLED: '0',
+      });
+      activeBaseUrl = temporaryServer.baseURL;
+      anonymousApi = await createApiContext(undefined, activeBaseUrl);
+    }
+
     adminApi = await createAuthenticatedContext(userEmails.admin);
     memberApi = await createAuthenticatedContext(userEmails.activeMember);
   });
@@ -90,7 +100,7 @@ test.describe('Reporting Module Playwright API E2E', () => {
     email: string,
   ): Promise<APIRequestContext> {
     const login = await loginAs(anonymousApi, email, TEST_PASSWORD);
-    return createApiContext(login.accessToken, temporaryServer.baseURL);
+    return createApiContext(login.accessToken, activeBaseUrl);
   }
 
   async function ensureRole(name: string, description: string) {

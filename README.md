@@ -44,6 +44,40 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Production Configuration
+
+Copy `.env.prod.example` to `.env.prod` before running `npm run start:prod`.
+
+Production startup now fails fast when required runtime variables are missing. The template groups variables into:
+
+- change from local development
+- add in production because `.env.dev` does not define them yet
+- keep the same as local development when the same behavior is intended
+
+For Render-native deployment:
+
+- set `APP_RUNTIME_ROLE=web` on the web service
+- set `APP_RUNTIME_ROLE=worker` on the background worker
+- keep `APP_RUNTIME_ROLE=all` for local/dev only
+- use `/api/v1/health` as the web service health check path
+- start with `REDIS_ENABLED=false` unless a managed Redis instance is provisioned
+
+For baseline production catalog data only, use:
+
+```bash
+npm run seed:prod
+```
+
+`seed:prod` only upserts roles, membership tiers, gym class templates, and exercises. It does not create demo users, trainer availability, schedules, or bookings.
+
+For an explicit production demo-user seed, use:
+
+```bash
+npm run seed:demo-users:prod
+```
+
+`seed:demo-users:prod` forces `NODE_ENV=production`, loads `.env.prod`, and only upserts demo users plus their role links. It does not create memberships, relational trainer availability rows, schedules, bookings, or payments.
+
 ## Run tests
 
 ```bash
@@ -53,22 +87,67 @@ $ npm run test
 # e2e tests
 $ npm run test:e2e
 
+# Playwright API e2e tests
+$ npm run test:api
+
 # test coverage
 $ npm run test:cov
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Playwright API target switch:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# default local mode
+$ npm run test:api
+
+# deployed non-production mode
+$ PLAYWRIGHT_TARGET=deployed PLAYWRIGHT_DEPLOY_ENV=staging API_BASE_URL=https://your-staging-host/api/v1/ PLAYWRIGHT_DATABASE_URL=postgresql://... npm run test:api
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+PowerShell:
+
+```powershell
+$env:PLAYWRIGHT_TARGET='deployed'
+$env:PLAYWRIGHT_DEPLOY_ENV='staging'
+$env:API_BASE_URL='https://your-staging-host/api/v1/'
+$env:PLAYWRIGHT_DATABASE_URL='postgresql://...'
+npm run test:api
+```
+
+Rules:
+
+- `PLAYWRIGHT_TARGET=local` is the default and auto-starts the local API harness
+- `PLAYWRIGHT_TARGET=deployed` disables the local Playwright `webServer` and requires both `API_BASE_URL` and `PLAYWRIGHT_DATABASE_URL`
+- deployed mode is blocked when `PLAYWRIGHT_DEPLOY_ENV=production`
+- some specs remain local-only because they depend on temporary process-level env overrides or the in-process SMTP harness
+- `PLAYWRIGHT_DATABASE_URL` must point to the same database backing `API_BASE_URL`, otherwise fixture seeding and API login will drift apart
+
+## Deployment
+
+This repository now includes [`render.yaml`](render.yaml) for a Render-native production topology:
+
+- `gms-backend-web`: HTTP API service
+- `gms-backend-worker`: RabbitMQ consumers and cron ownership
+
+Operational rules:
+
+- Render Postgres is provided through `DATABASE_URL`
+- Railway RabbitMQ is provided through `RABBITMQ_URL`
+- the worker must fail hard if DB or RabbitMQ startup fails
+- the web service must serve HTTP without starting worker-only background processing
+
+Set the remaining secrets and URLs in Render before deploying. Use `.env.prod.example` as the env key checklist.
+
+## Docker Image Deploys
+
+If the hosting platform cannot access the GitHub repository directly, you can deploy the worker from a registry image instead of a connected repo.
+
+- build the worker image from `Dockerfile.worker`
+- deploy that image as `APP_RUNTIME_ROLE=worker`
+- keep the web service on Render
+- run `npm run db:deploy` as a separate release step, not on worker startup
+
+See [`docs/docker-image-deployment-walkthrough.md`](docs/docker-image-deployment-walkthrough.md) for the registry-based workflow.
 
 ## Resources
 

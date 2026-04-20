@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import * as dotenv from 'dotenv';
 import {
   parseAppRuntimeRole,

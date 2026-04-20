@@ -6,10 +6,14 @@ import { config } from '../src/libs/config';
 // Import from source generated folder - will be copied as-is to dist
 import { PrismaClient } from '@prisma/client';
 
+function resolveConnectionString() {
+  return process.env.PLAYWRIGHT_DATABASE_URL?.trim() || config.DATABASE_URL;
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   constructor() {
-    const connectionString = config.DATABASE_URL;
+    const connectionString = resolveConnectionString();
     const pool = new Pool({ connectionString });
     const adapter = new PrismaPg(pool);
     super({ adapter });

@@ -31,6 +31,7 @@ import {
   listMembershipRecordsForUser,
   type SeededUsers,
 } from './api-helpers';
+import { isDeployedTarget } from './target-mode';
 
 test.describe('Playwright API E2E', () => {
   let seededUsers: SeededUsers;
@@ -523,7 +524,12 @@ test.describe('Playwright API E2E', () => {
       expect(duplicateResponse.status()).toBe(400);
     });
 
-    test('rolls the user back when verification email delivery fails during create-user', async () => {
+  test('rolls the user back when verification email delivery fails during create-user', async () => {
+      test.skip(
+        isDeployedTarget(),
+        'This scenario requires a temporary local server with per-process email env overrides.',
+      );
+
       const temporaryServer = await startTemporaryApiServer({
         EMAIL_USER: '',
         EMAIL_PASSWORD: '',

@@ -233,7 +233,7 @@ test.describe('Class Booking Playwright API E2E', () => {
       testData.trainerUser.id,
       staffUserId,
       ...tempUserIds,
-    ];
+    ].filter((userId): userId is string => Boolean(userId));
 
     if (bookingIds.length > 0) {
       await prisma.notification.deleteMany({

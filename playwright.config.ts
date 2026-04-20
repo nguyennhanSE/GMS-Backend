@@ -1,9 +1,10 @@
 import { defineConfig } from '@playwright/test';
+import {
+  PLAYWRIGHT_API_BASE_URL,
+  usesLocalPlaywrightServer,
+} from './test/playwright/target-mode';
 
-const port = process.env.PLAYWRIGHT_API_PORT ?? '3015';
-const baseURL = process.env.API_BASE_URL ?? `http://127.0.0.1:${port}/api/v1/`;
-
-export default defineConfig({
+const config = defineConfig({
   testDir: './test/playwright',
   testMatch: '*.spec.ts',
   fullyParallel: false,
@@ -11,16 +12,21 @@ export default defineConfig({
   timeout: 30_000,
   reporter: 'list',
   use: {
-    baseURL,
+    baseURL: PLAYWRIGHT_API_BASE_URL,
     extraHTTPHeaders: {
       Accept: 'application/json',
     },
   },
-  webServer: {
+});
+
+if (usesLocalPlaywrightServer()) {
+  config.webServer = {
     command:
       'node -r ts-node/register/transpile-only -r tsconfig-paths/register test/playwright/server.ts',
-    url: `${baseURL}health`,
+    url: `${PLAYWRIGHT_API_BASE_URL}health`,
     reuseExistingServer: false,
     timeout: 120_000,
-  },
-});
+  };
+}
+
+export default config;

@@ -12,6 +12,7 @@ import {
   type TemporaryApiServer,
 } from './api-helpers';
 import { SmtpTestServer, type SmtpTestServerOptions } from './smtp-test-server';
+import { isDeployedTarget } from './target-mode';
 
 const prisma = new PrismaService();
 const SUPPORT_ADMIN_EMAIL = 'support-admin@test.local';
@@ -28,6 +29,11 @@ type SupportHarness = {
 };
 
 test.describe('Support Playwright API E2E', () => {
+  test.skip(
+    isDeployedTarget(),
+    'Support Playwright tests require a temporary local SMTP server and per-process email env overrides.',
+  );
+
   let seededUsers: SeededUsers;
   let defaultHarness: SupportHarness;
 

@@ -10,10 +10,12 @@ import Stripe from 'stripe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { config } from '../../src/libs/config';
 import { sha256Hash } from '../../src/utils/hash';
+import {
+  IS_DEPLOYED_PLAYWRIGHT_TARGET,
+  PLAYWRIGHT_API_BASE_URL,
+} from './target-mode';
 
-export const API_BASE_URL =
-  process.env.API_BASE_URL ??
-  `http://127.0.0.1:${process.env.PLAYWRIGHT_API_PORT ?? '3015'}/api/v1/`;
+export const API_BASE_URL = PLAYWRIGHT_API_BASE_URL;
 
 const TEST_PASSWORD = 'PlaywrightApi@12345';
 const TEST_EMAILS = {
@@ -677,6 +679,12 @@ export function createMembershipPayload() {
 export async function startTemporaryApiServer(
   envOverrides: Record<string, string>,
 ): Promise<TemporaryApiServer> {
+  if (IS_DEPLOYED_PLAYWRIGHT_TARGET) {
+    throw new Error(
+      'startTemporaryApiServer is local-only and cannot be used when PLAYWRIGHT_TARGET=deployed.',
+    );
+  }
+
   const port = `${3200 + Math.floor(Math.random() * 300)}`;
   const baseURL = `http://127.0.0.1:${port}/api/v1/`;
   const child = spawn(

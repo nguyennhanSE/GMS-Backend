@@ -210,6 +210,43 @@ describe('AuthService', () => {
     );
   });
 
+  it('login builds unique refresh token payloads for repeated logins', async () => {
+    const { service, authRepository, userService, roleService } = createDeps();
+    const user = createUser();
+
+    userService.getUserByEmail.mockResolvedValue(user);
+    roleService.getUserRoles.mockResolvedValue(['member']);
+    mockedComparePassword.mockResolvedValue(true);
+    authRepository.generateToken.mockImplementation(async payload =>
+      JSON.stringify(payload),
+    );
+    authRepository.storeToken.mockResolvedValue({ id: 'session-1' });
+
+    const first = await service.login({
+      username: user.email,
+      password: 'Password123',
+    } as LoginDto);
+    const second = await service.login({
+      username: user.email,
+      password: 'Password123',
+    } as LoginDto);
+
+    const firstRefreshPayload = JSON.parse(first.refreshToken) as {
+      jti?: string;
+      tokenType: string;
+    };
+    const secondRefreshPayload = JSON.parse(second.refreshToken) as {
+      jti?: string;
+      tokenType: string;
+    };
+
+    expect(firstRefreshPayload.tokenType).toBe(tokenType.RefreshToken);
+    expect(secondRefreshPayload.tokenType).toBe(tokenType.RefreshToken);
+    expect(firstRefreshPayload.jti).toEqual(expect.any(String));
+    expect(secondRefreshPayload.jti).toEqual(expect.any(String));
+    expect(firstRefreshPayload.jti).not.toBe(secondRefreshPayload.jti);
+  });
+
   it('logout rejects requests without a refresh token', async () => {
     const { service } = createDeps();
 

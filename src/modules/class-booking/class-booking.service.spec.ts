@@ -79,6 +79,7 @@ describe('ClassBookingService', () => {
         count: jest.fn(),
         create: jest.fn(),
         upsert: jest.fn(),
+        findMany: jest.fn(),
       },
       trainerAvailability: {
         findMany: jest.fn(),
@@ -145,6 +146,7 @@ describe('ClassBookingService', () => {
             findFirst: jest.fn(),
             count: jest.fn(),
             create: jest.fn(),
+            findMany: jest.fn(),
           },
           trainerAvailability: {
             findMany: jest.fn(),
@@ -176,6 +178,7 @@ describe('ClassBookingService', () => {
             findFirst: jest.fn(),
             count: jest.fn(),
             create: jest.fn(),
+            findMany: jest.fn(),
           },
           trainerAvailability: {
             findMany: jest.fn(),
@@ -205,6 +208,7 @@ describe('ClassBookingService', () => {
             findFirst: jest.fn().mockResolvedValue(mockBooking), // Existing booking
             count: jest.fn().mockResolvedValue(0),
             create: jest.fn(),
+            findMany: jest.fn(),
           },
           trainerAvailability: {
             findMany: jest.fn().mockResolvedValue([]),
@@ -234,6 +238,7 @@ describe('ClassBookingService', () => {
             findFirst: jest.fn().mockResolvedValue(null),
             count: jest.fn().mockResolvedValue(20), // At capacity
             create: jest.fn(),
+            findMany: jest.fn(),
           },
           trainerAvailability: {
             findMany: jest.fn().mockResolvedValue([]),
@@ -263,6 +268,7 @@ describe('ClassBookingService', () => {
             findFirst: jest.fn(),
             count: jest.fn(),
             create: jest.fn(),
+            findMany: jest.fn(),
           },
           trainerAvailability: {
             findMany: jest.fn(),
@@ -295,6 +301,7 @@ describe('ClassBookingService', () => {
             findFirst: jest.fn(),
             count: jest.fn(),
             create: jest.fn(),
+            findMany: jest.fn(),
           },
           trainerAvailability: {
             findMany: jest.fn(),
@@ -335,6 +342,7 @@ describe('ClassBookingService', () => {
               bookingEndDate: new Date('2030-01-14'),
               status: 'pending',
             }),
+            findMany: jest.fn(),
           },
           trainerAvailability: {
             findMany: jest.fn().mockResolvedValue([
@@ -349,6 +357,18 @@ describe('ClassBookingService', () => {
         };
         return callback(mockTx as any);
       });
+      (prismaService.classBooking.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'new-booking',
+          userId: 'user-1',
+          classScheduleId: 'schedule-1',
+          bookingStartDate: new Date('2030-01-07'),
+          bookingEndDate: new Date('2030-01-14'),
+          status: 'pending',
+          user: null,
+          classSchedule: null,
+        },
+      ] as any);
       (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
         { id: 'schedule-1', trainerId: 'trainer-1' },
       ] as any);
@@ -363,6 +383,13 @@ describe('ClassBookingService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].status).toBe('pending');
+      expect(prismaService.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          isolationLevel: 'Serializable',
+          timeout: 20000,
+        }),
+      );
       expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',
@@ -370,6 +397,69 @@ describe('ClassBookingService', () => {
           'trainer:availability:trainer-1',
         ]),
       );
+    });
+
+    it('should retry transient serializable conflicts before succeeding', async () => {
+      const mondaySchedule = { ...mockSchedule, dayOfWeek: 'MON' };
+      const successfulBooking = {
+        id: 'new-booking',
+        userId: 'user-1',
+        classScheduleId: 'schedule-1',
+        bookingStartDate: new Date('2030-01-07'),
+        bookingEndDate: new Date('2030-01-14'),
+        status: 'pending',
+      };
+
+      prismaService.$transaction
+        .mockRejectedValueOnce({ code: 'P2034' })
+        .mockImplementationOnce(async (callback) => {
+          const mockTx = {
+            $queryRaw: jest.fn(),
+            classSchedule: {
+              findUnique: jest.fn().mockResolvedValue(mondaySchedule),
+            },
+            classBooking: {
+              findFirst: jest.fn().mockResolvedValue(null),
+              count: jest.fn().mockResolvedValue(0),
+              upsert: jest.fn().mockResolvedValue(successfulBooking),
+              findMany: jest.fn(),
+            },
+            trainerAvailability: {
+              findMany: jest.fn().mockResolvedValue([
+                {
+                  trainerId: 'trainer-1',
+                  isAvailable: true,
+                  startTime: new Date('2030-01-01T08:00:00Z'),
+                  endTime: new Date('2030-01-01T12:00:00Z'),
+                },
+              ]),
+            },
+          };
+
+          return callback(mockTx as any);
+        });
+
+      (prismaService.classBooking.findMany as jest.Mock).mockResolvedValue([
+        {
+          ...successfulBooking,
+          user: null,
+          classSchedule: null,
+        },
+      ] as any);
+      (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
+        { id: 'schedule-1', trainerId: 'trainer-1' },
+      ] as any);
+
+      const result = await service.create({
+        classScheduleId: ['schedule-1'],
+        userId: 'user-1',
+        bookingStartDate: new Date('2030-01-07'),
+        bookingEndDate: new Date('2030-01-14'),
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('new-booking');
+      expect(prismaService.$transaction).toHaveBeenCalledTimes(2);
     });
   });
 

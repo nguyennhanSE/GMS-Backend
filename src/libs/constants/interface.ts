@@ -6,6 +6,7 @@ export interface TokenPayload {
   username?: string;
   tokenType: tokenType;
   roles: string[];
+  jti?: string;
   iat?: number;
   exp?: number;
 }

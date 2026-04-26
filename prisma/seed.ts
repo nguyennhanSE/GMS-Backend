@@ -1257,6 +1257,7 @@ async function main() {
         endTime: createTimeForSchedule(8, 0),
         location: 'Studio A',
         capacity: 20,
+        price: 120000,
       },
     }),
     // Yoga - Advanced: Monday 17:00-18:30 with Emma Williams
@@ -1269,6 +1270,7 @@ async function main() {
         endTime: createTimeForSchedule(18, 30),
         location: 'Studio A',
         capacity: 15,
+        price: 120000,
       },
     }),
     // HIIT 30min: Monday 6:00-6:30 with Mike Chen
@@ -1281,6 +1283,7 @@ async function main() {
         endTime: createTimeForSchedule(6, 30),
         location: 'Main Floor',
         capacity: 25,
+        price: 120000,
       },
     }),
     // HIIT 45min: Wednesday 18:00-18:45 with Lisa Anderson
@@ -1293,6 +1296,7 @@ async function main() {
         endTime: createTimeForSchedule(18, 45),
         location: 'Main Floor',
         capacity: 25,
+        price: 120000,
       },
     }),
     // Strength Training: Tuesday 14:00-15:00 with David Martinez
@@ -1305,6 +1309,7 @@ async function main() {
         endTime: createTimeForSchedule(15, 0),
         location: 'Weight Room',
         capacity: 12,
+        price: 120000,
       },
     }),
     // Pilates: Wednesday 10:00-11:00 with Lisa Anderson
@@ -1317,6 +1322,7 @@ async function main() {
         endTime: createTimeForSchedule(11, 0),
         location: 'Studio B',
         capacity: 15,
+        price: 120000,
       },
     }),
     // Zumba: Tuesday 18:00-19:00 with Emma Williams
@@ -1329,6 +1335,7 @@ async function main() {
         endTime: createTimeForSchedule(19, 0),
         location: 'Studio A',
         capacity: 30,
+        price: 120000,
       },
     }),
     // Spinning: Monday 6:30-7:30 with Mike Chen
@@ -1341,6 +1348,7 @@ async function main() {
         endTime: createTimeForSchedule(7, 30),
         location: 'Spin Room',
         capacity: 20,
+        price: 120000,
       },
     }),
     // Boxing: Monday 14:00-15:00 with John Trainer
@@ -1353,6 +1361,7 @@ async function main() {
         endTime: createTimeForSchedule(15, 0),
         location: 'Boxing Ring',
         capacity: 10,
+        price: 120000,
       },
     }),
     // CrossFit: Saturday 18:00-19:00 with Mike Chen
@@ -1365,6 +1374,7 @@ async function main() {
         endTime: createTimeForSchedule(19, 0),
         location: 'CrossFit Zone',
         capacity: 15,
+        price: 120000,
       },
     }),
     // Stretching: Friday 7:00-7:30 with John Trainer
@@ -1377,6 +1387,7 @@ async function main() {
         endTime: createTimeForSchedule(7, 30),
         location: 'Studio B',
         capacity: 20,
+        price: 120000,
       },
     }),
     // BodyPump: Monday 10:00-11:00 with John Trainer
@@ -1389,6 +1400,7 @@ async function main() {
         endTime: createTimeForSchedule(11, 0),
         location: 'Weight Room',
         capacity: 20,
+        price: 120000,
       },
     }),
   ]);

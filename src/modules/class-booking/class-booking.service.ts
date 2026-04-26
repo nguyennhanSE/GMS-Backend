@@ -29,6 +29,9 @@ import { AppCacheService } from '../../libs/cache/cache.service';
 import { buildClassScheduleInvalidationTags } from '../class-schedule/class-schedule.cache';
 import { buildTrainerAvailabilityTag } from '../trainer/trainer.cache';
 
+const BOOKING_SERIALIZABLE_RETRY_ATTEMPTS = 3;
+const BOOKING_TRANSACTION_TIMEOUT_MS = 20000;
+
 @Injectable()
 export class ClassBookingService {
   private readonly logger = new Logger(ClassBookingService.name);
@@ -50,6 +53,7 @@ export class ClassBookingService {
     trainerId: string,
     startTime: Date,
     endTime: Date,
+    dayOfWeek: number,
     tx?: Prisma.TransactionClient,
   ): Promise<boolean> {
     const prismaClient = tx || this.prisma;
@@ -64,6 +68,7 @@ export class ClassBookingService {
       await prismaClient.trainerAvailability.findMany({
         where: {
           trainerId: trainerId,
+          dayOfWeek,
           isAvailable: true,
         },
       });
@@ -161,6 +166,31 @@ export class ClassBookingService {
     return true;
   }
 
+  private normalizeDateOnly(date: Date): Date {
+    const normalized = new Date(date);
+    normalized.setUTCHours(0, 0, 0, 0);
+    return normalized;
+  }
+
+  private async getScheduleExceptionForDate(
+    scheduleId: string,
+    date: Date,
+    tx?: Prisma.TransactionClient,
+  ) {
+    if (!tx?.scheduleException) {
+      return this.scheduleExceptionService.getExceptionForDate(scheduleId, date);
+    }
+
+    return tx.scheduleException.findUnique({
+      where: {
+        scheduleId_exceptionDate: {
+          scheduleId,
+          exceptionDate: this.normalizeDateOnly(date),
+        },
+      },
+    });
+  }
+
   /**
    * Create a new class booking with full race condition protection
    * Updated for new schema with GymClass relation
@@ -180,229 +210,265 @@ export class ClassBookingService {
       );
     }
 
-    const wantedSchedules = createClassBookingDto.classScheduleId;
+    const wantedSchedules = [...new Set(createClassBookingDto.classScheduleId)].sort();
     const userId = createClassBookingDto.userId;
 
-    // Use Serializable isolation level to prevent race conditions
-    const createdBookings = await this.prisma.$transaction(
-      async (tx) => {
-        const bookingsToCreate: ClassBookingEntity[] = [];
+    // Use Serializable isolation level to prevent race conditions.
+    // Retrying P2034 conflicts prevents transient DB serialization failures
+    // from leaking as 500s during concurrent booking attempts.
+    const createdBookingIds = await this.runSerializableRetry(
+      () =>
+        this.prisma.$transaction(
+          async (tx) => {
+            const bookingIds: string[] = [];
 
-        for (const scheduleId of wantedSchedules) {
-          // ============================================
-          // 1. LOCK THE SCHEDULE ROW (FOR UPDATE)
-          // This prevents concurrent bookings from reading stale data
-          // ============================================
-          await tx.$queryRaw`
-          SELECT id FROM class_schedules 
-          WHERE id = ${scheduleId}::uuid 
-          FOR UPDATE
-        `;
+            for (const scheduleId of wantedSchedules) {
+              // ============================================
+              // 1. LOCK THE SCHEDULE ROW (FOR UPDATE)
+              // This prevents concurrent bookings from reading stale data.
+              // Schedule ids are sorted before the transaction so concurrent
+              // multi-schedule requests acquire locks in a deterministic order.
+              // ============================================
+              await tx.$queryRaw`
+              SELECT id FROM class_schedules
+              WHERE id = ${scheduleId}::uuid
+              FOR UPDATE
+            `;
 
-          // Get the schedule with lock acquired, including gymClass relation
-          const classSchedule = await tx.classSchedule.findUnique({
-            where: { id: scheduleId },
-            include: {
-              gymClass: true,
-              scheduleDays: {
-                select: {
-                  dayOfWeek: true,
+              // Get the schedule with lock acquired, including gymClass relation
+              const classSchedule = await tx.classSchedule.findUnique({
+                where: { id: scheduleId },
+                include: {
+                  gymClass: true,
+                  scheduleDays: {
+                    select: {
+                      dayOfWeek: true,
+                    },
+                  },
                 },
-              },
-            },
-          });
+              });
 
-          if (!classSchedule) {
-            throw new NotFoundException(
-              `Class schedule with id ${scheduleId} not found`,
-            );
-          }
+              if (!classSchedule) {
+                throw new NotFoundException(
+                  `Class schedule with id ${scheduleId} not found`,
+                );
+              }
 
-          // Get class name from gymClass relation
-          const className = classSchedule.gymClass.className;
+              // Get class name from gymClass relation
+              const className = classSchedule.gymClass.className;
 
-          // ============================================
-          // 2. SCHEDULE VALIDITY CHECK
-          // Check if schedule is active and within valid date range
-          // ============================================
-          if (!this.isScheduleValid(classSchedule)) {
-            throw new BadRequestException(
-              `Class "${className}" schedule is not currently active or valid`,
-            );
-          }
+              // ============================================
+              // 2. SCHEDULE VALIDITY CHECK
+              // Check if schedule is active and within valid date range
+              // ============================================
+              if (!this.isScheduleValid(classSchedule)) {
+                throw new BadRequestException(
+                  `Class "${className}" schedule is not currently active or valid`,
+                );
+              }
 
-          // ============================================
-          // 2.1. DAY OF WEEK VALIDATION
-          // Booking date must match the schedule's recurring day
-          // Uses UTC to avoid timezone issues
-          // Supports both legacy dayOfWeek field and new scheduleDays relation
-          // ============================================
-          const bookingDate = new Date(createClassBookingDto.bookingStartDate!);
-          const bookingDayOfWeek = bookingDate.getUTCDay(); // 0=Sun, 1=Mon, etc.
+              // ============================================
+              // 2.1. DAY OF WEEK VALIDATION
+              // Booking date must match the schedule's recurring day
+              // Uses UTC to avoid timezone issues
+              // Supports both legacy dayOfWeek field and new scheduleDays relation
+              // ============================================
+              const bookingDate = new Date(createClassBookingDto.bookingStartDate!);
+              const bookingDayOfWeek = bookingDate.getUTCDay(); // 0=Sun, 1=Mon, etc.
 
-          // Get schedule days - prefer scheduleDays, fall back to legacy dayOfWeek
-          const scheduleDaysOfWeek =
-            classSchedule.scheduleDays?.length
-              ? classSchedule.scheduleDays.map((scheduleDay) => scheduleDay.dayOfWeek)
-              : classSchedule.dayOfWeek
-                ? [classSchedule.dayOfWeek]
-                : [];
+              // Get schedule days - prefer scheduleDays, fall back to legacy dayOfWeek
+              const scheduleDaysOfWeek =
+                classSchedule.scheduleDays?.length
+                  ? classSchedule.scheduleDays.map(
+                      (scheduleDay) => scheduleDay.dayOfWeek,
+                    )
+                  : classSchedule.dayOfWeek
+                    ? [classSchedule.dayOfWeek]
+                    : [];
 
-          // Check if booking day matches any schedule day
-          const bookingDayName = this.numberToDayOfWeek(bookingDayOfWeek);
-          if (
-            scheduleDaysOfWeek.length > 0 &&
-            !scheduleDaysOfWeek.includes(bookingDayName)
-          ) {
-            const daysStr = scheduleDaysOfWeek.join(', ');
-            throw new BadRequestException(
-              `Class "${className}" is scheduled for ${daysStr} only. ` +
-                `The booking date falls on ${bookingDayName}.`,
-            );
-          }
+              // Check if booking day matches any schedule day
+              const bookingDayName = this.numberToDayOfWeek(bookingDayOfWeek);
+              if (
+                scheduleDaysOfWeek.length > 0 &&
+                !scheduleDaysOfWeek.includes(bookingDayName)
+              ) {
+                const daysStr = scheduleDaysOfWeek.join(', ');
+                throw new BadRequestException(
+                  `Class "${className}" is scheduled for ${daysStr} only. ` +
+                    `The booking date falls on ${bookingDayName}.`,
+                );
+              }
 
-          // ============================================
-          // 2.2. EXCEPTION DATE CHECK
-          // Check if the booking date has a cancellation or rescheduling
-          // ============================================
-          const exception =
-            await this.scheduleExceptionService.getExceptionForDate(
-              scheduleId,
-              bookingDate,
-            );
-
-          if (exception) {
-            if (exception.type === 'CANCELLED') {
-              const reason = exception.reason ? ` (${exception.reason})` : '';
-              throw new BadRequestException(
-                `Class "${className}" is cancelled on ${bookingDate.toISOString().split('T')[0]}${reason}`,
+              // ============================================
+              // 2.2. EXCEPTION DATE CHECK
+              // Check if the booking date has a cancellation or rescheduling
+              // ============================================
+              const exception = await this.getScheduleExceptionForDate(
+                scheduleId,
+                bookingDate,
+                tx,
               );
-            } else if (exception.type === 'RESCHEDULED') {
-              const newTime = exception.newStartTime
-                ? ` to ${exception.newStartTime.toISOString().slice(11, 16)}-${exception.newEndTime?.toISOString().slice(11, 16)}`
-                : '';
-              throw new BadRequestException(
-                `Class "${className}" is rescheduled on ${bookingDate.toISOString().split('T')[0]}${newTime}. Please book for the new time slot.`,
+
+              if (exception) {
+                if (exception.type === 'CANCELLED') {
+                  const reason = exception.reason ? ` (${exception.reason})` : '';
+                  throw new BadRequestException(
+                    `Class "${className}" is cancelled on ${bookingDate.toISOString().split('T')[0]}${reason}`,
+                  );
+                } else if (exception.type === 'RESCHEDULED') {
+                  const newTime = exception.newStartTime
+                    ? ` to ${exception.newStartTime.toISOString().slice(11, 16)}-${exception.newEndTime?.toISOString().slice(11, 16)}`
+                    : '';
+                  throw new BadRequestException(
+                    `Class "${className}" is rescheduled on ${bookingDate.toISOString().split('T')[0]}${newTime}. Please book for the new time slot.`,
+                  );
+                }
+              }
+
+              // ============================================
+              // 3. SELF-BOOKING PREVENTION
+              // Trainers cannot book their own classes
+              // trainerId is now required (non-null)
+              // ============================================
+              if (classSchedule.trainerId === userId) {
+                throw new BadRequestException(
+                  `Trainers cannot book their own classes`,
+                );
+              }
+
+              // ============================================
+              // 4. DUPLICATE BOOKING CHECK
+              // User cannot book the same class on overlapping dates
+              // ============================================
+              const existingBooking = await tx.classBooking.findFirst({
+                where: {
+                  userId: userId,
+                  classScheduleId: scheduleId,
+                  status: { notIn: ['cancelled'] },
+                  // Date-aware: only check bookings that overlap with the requested date range
+                  bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
+                  bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
+                },
+              });
+
+              if (existingBooking) {
+                throw new BadRequestException(
+                  `User already has an active booking for class "${className}"`,
+                );
+              }
+
+              // ============================================
+              // 5. CAPACITY CHECK (per-occurrence, not all-time)
+              // Count only bookings that overlap with the requested date range
+              // ============================================
+              const currentBookingsCount = await tx.classBooking.count({
+                where: {
+                  classScheduleId: scheduleId,
+                  status: { in: ['pending', 'confirmed', 'attended'] },
+                  // Date-aware: only count bookings for this specific occurrence
+                  bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
+                  bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
+                },
+              });
+
+              if (currentBookingsCount >= classSchedule.capacity) {
+                throw new BadRequestException(
+                  `Class "${className}" is full (${currentBookingsCount}/${classSchedule.capacity} spots taken)`,
+                );
+              }
+
+              // ============================================
+              // 6. TRAINER AVAILABILITY CHECK
+              // trainerId is now required, use startTime/endTime
+              // ============================================
+              const isTrainerAvailable = await this.checkTrainerAvailability(
+                classSchedule.trainerId,
+                classSchedule.startTime,
+                classSchedule.endTime,
+                bookingDayOfWeek,
+                tx,
               );
+
+              if (!isTrainerAvailable) {
+                throw new BadRequestException(
+                  `Trainer is not available for class "${className}" at the scheduled time`,
+                );
+              }
+
+              // ============================================
+              // 7. CREATE OR REACTIVATE BOOKING
+              // Uses upsert to handle cancel-and-rebook:
+              // If a cancelled booking exists for the same (user, schedule, date),
+              // reactivate it instead of inserting a duplicate row.
+              // ============================================
+              const newBooking = await tx.classBooking.upsert({
+                where: {
+                  unique_user_schedule_date_booking: {
+                    userId: userId,
+                    classScheduleId: scheduleId,
+                    bookingStartDate: createClassBookingDto.bookingStartDate!,
+                  },
+                },
+                update: {
+                  status: 'pending',
+                  bookingEndDate: createClassBookingDto.bookingEndDate!,
+                },
+                create: {
+                  userId: userId,
+                  classScheduleId: scheduleId,
+                  bookingStartDate: createClassBookingDto.bookingStartDate!,
+                  bookingEndDate: createClassBookingDto.bookingEndDate!,
+                  status: 'pending',
+                },
+              });
+
+              bookingIds.push(newBooking.id);
             }
-          }
 
-          // ============================================
-          // 3. SELF-BOOKING PREVENTION
-          // Trainers cannot book their own classes
-          // trainerId is now required (non-null)
-          // ============================================
-          if (classSchedule.trainerId === userId) {
-            throw new BadRequestException(
-              `Trainers cannot book their own classes`,
-            );
-          }
-
-          // ============================================
-          // 4. DUPLICATE BOOKING CHECK
-          // User cannot book the same class on overlapping dates
-          // ============================================
-          const existingBooking = await tx.classBooking.findFirst({
-            where: {
-              userId: userId,
-              classScheduleId: scheduleId,
-              status: { notIn: ['cancelled'] },
-              // Date-aware: only check bookings that overlap with the requested date range
-              bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
-              bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
-            },
-          });
-
-          if (existingBooking) {
-            throw new BadRequestException(
-              `User already has an active booking for class "${className}"`,
-            );
-          }
-
-          // ============================================
-          // 5. CAPACITY CHECK (per-occurrence, not all-time)
-          // Count only bookings that overlap with the requested date range
-          // ============================================
-          const currentBookingsCount = await tx.classBooking.count({
-            where: {
-              classScheduleId: scheduleId,
-              status: { in: ['pending', 'confirmed', 'attended'] },
-              // Date-aware: only count bookings for this specific occurrence
-              bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
-              bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
-            },
-          });
-
-          if (currentBookingsCount >= classSchedule.capacity) {
-            throw new BadRequestException(
-              `Class "${className}" is full (${currentBookingsCount}/${classSchedule.capacity} spots taken)`,
-            );
-          }
-
-          // ============================================
-          // 6. TRAINER AVAILABILITY CHECK
-          // trainerId is now required, use startTime/endTime
-          // ============================================
-          const isTrainerAvailable = await this.checkTrainerAvailability(
-            classSchedule.trainerId,
-            classSchedule.startTime,
-            classSchedule.endTime,
-            tx,
-          );
-
-          if (!isTrainerAvailable) {
-            throw new BadRequestException(
-              `Trainer is not available for class "${className}" at the scheduled time`,
-            );
-          }
-
-          // ============================================
-          // 7. CREATE OR REACTIVATE BOOKING
-          // Uses upsert to handle cancel-and-rebook:
-          // If a cancelled booking exists for the same (user, schedule, date),
-          // reactivate it instead of inserting a duplicate row.
-          // ============================================
-          const newBooking = await tx.classBooking.upsert({
-            where: {
-              unique_user_schedule_date_booking: {
-                userId: userId,
-                classScheduleId: scheduleId,
-                bookingStartDate: createClassBookingDto.bookingStartDate!,
-              },
-            },
-            update: {
-              status: 'pending',
-              bookingEndDate: createClassBookingDto.bookingEndDate!,
-            },
-            create: {
-              userId: userId,
-              classScheduleId: scheduleId,
-              bookingStartDate: createClassBookingDto.bookingStartDate!,
-              bookingEndDate: createClassBookingDto.bookingEndDate!,
-              status: 'pending',
-            },
-            include: {
-              user: true,
-              classSchedule: {
-                include: { gymClass: true },
-              },
-            },
-          });
-
-          bookingsToCreate.push(newBooking as unknown as ClassBookingEntity);
-        }
-
-        return bookingsToCreate;
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 10000, // 10 second timeout
-      },
+            return bookingIds;
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            timeout: BOOKING_TRANSACTION_TIMEOUT_MS,
+          },
+        ),
+      'This class was just updated by another booking request. Please try again.',
     );
+
+    const createdBookings = await this.prisma.classBooking.findMany({
+      where: {
+        id: {
+          in: createdBookingIds,
+        },
+      },
+      include: {
+        user: true,
+        classSchedule: {
+          include: {
+            gymClass: true,
+          },
+        },
+      },
+    });
+
+    const bookingById = new Map(
+      createdBookings.map((booking) => [booking.id, booking]),
+    );
+
+    const orderedCreatedBookings = createdBookingIds.map((bookingId) => {
+      const booking = bookingById.get(bookingId);
+      if (!booking) {
+        throw new NotFoundException(
+          `Class booking with id ${bookingId} not found after creation`,
+        );
+      }
+
+      return booking as unknown as ClassBookingEntity;
+    });
 
     await this.invalidateAvailabilityForScheduleIds(wantedSchedules);
 
-    return createdBookings;
+    return orderedCreatedBookings;
   }
 
   /**
@@ -667,5 +733,44 @@ export class ClassBookingService {
     }
 
     await this.appCacheService.invalidateTags([...tags]);
+  }
+
+  private async runSerializableRetry<T>(
+    operation: () => Promise<T>,
+    finalMessage: string,
+    maxAttempts: number = BOOKING_SERIALIZABLE_RETRY_ATTEMPTS,
+  ): Promise<T> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+
+        if (!this.isSerializableConflict(error) || attempt === maxAttempts - 1) {
+          break;
+        }
+      }
+    }
+
+    if (this.isSerializableConflict(lastError)) {
+      throw new BadRequestException(finalMessage);
+    }
+
+    throw lastError;
+  }
+
+  private isSerializableConflict(error: unknown): boolean {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return error.code === 'P2034';
+    }
+
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'P2034'
+    );
   }
 }

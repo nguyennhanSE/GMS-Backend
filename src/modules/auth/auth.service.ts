@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, UnauthorizedException, NotFoundException } from "@nestjs/common";
 import type { JwtSignOptions } from "@nestjs/jwt";
+import { randomUUID } from "crypto";
 import {
     LoginDto,
     LogoutDto,
@@ -61,6 +62,22 @@ export class AuthService {
         return expiresIn as JwtExpiresIn;
     }
 
+    private buildRefreshTokenPayload(
+        userId: string,
+        username: string,
+        email: string,
+        roles: string[],
+    ): TokenPayload {
+        return {
+            sub: userId,
+            tokenType: tokenType.RefreshToken,
+            username,
+            email,
+            roles,
+            jti: randomUUID(),
+        };
+    }
+
     async registerMember(dto: RegisterMemberDto) {
         this.logger.debug(`[${this.context}] registerMember start`, {
             email: dto.email,
@@ -113,13 +130,12 @@ export class AuthService {
                 email: user.email,
                 roles
             }; 
-            const refreshTokenPayload: TokenPayload = {
-                sub: user.id,
-                tokenType: tokenType.RefreshToken,
-                username: user.id,
-                email: user.email,
-                roles
-            };
+            const refreshTokenPayload = this.buildRefreshTokenPayload(
+                user.id,
+                user.id,
+                user.email,
+                roles,
+            );
 
             const refreshExpiry = rememberMe
                 ? config.REFRESH_TOKEN_REMEMBER_EXPIRES_IN
@@ -251,13 +267,12 @@ export class AuthService {
                 email: user.email,
                 roles
             };
-            const refreshTokenPayload: TokenPayload = {
+            const refreshTokenPayload = this.buildRefreshTokenPayload(
                 sub,
-                tokenType: tokenType.RefreshToken,
-                username: username || user.id,
-                email: user.email,
-                roles
-            };
+                username || user.id,
+                user.email,
+                roles,
+            );
             const accessTokenOptions = this.buildJwtSignOptions(
                 config.JWT_SECRET_ACCESS_TOKEN,
                 config.ACCESS_TOKEN_EXPIRES_IN,
@@ -319,13 +334,12 @@ export class AuthService {
                 email: email || user.email,
                 roles,
             };
-            const refreshTokenPayload: TokenPayload = {
-                sub: user.id,
-                tokenType: tokenType.RefreshToken,
-                username: user.id,
-                email: email || user.email,
+            const refreshTokenPayload = this.buildRefreshTokenPayload(
+                user.id,
+                user.id,
+                email || user.email,
                 roles,
-            };
+            );
             const accessTokenOptions = this.buildJwtSignOptions(
                 config.JWT_SECRET_ACCESS_TOKEN,
                 config.ACCESS_TOKEN_EXPIRES_IN,

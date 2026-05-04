@@ -10,9 +10,12 @@ describe('MembershipsController', () => {
     service = {
       create: jest.fn(),
       findAll: jest.fn(),
+      findMyMembership: jest.fn(),
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      renewMyMembership: jest.fn(),
+      changeMyMembershipPlan: jest.fn(),
       initiateCheckout: jest.fn(),
     };
 
@@ -52,5 +55,45 @@ describe('MembershipsController', () => {
 
     expect(service.initiateCheckout).toHaveBeenCalledWith('tier-1', 'user-1');
     expect(result.checkoutUrl).toBe('https://stripe.com/123');
+  });
+
+  it('renewMyMembership should pass user.sub', async () => {
+    service.renewMyMembership.mockResolvedValue({
+      checkoutUrl: 'https://stripe.com/renew',
+    });
+
+    const result = await controller.renewMyMembership({
+      sub: 'user-1',
+      email: 'test@test.com',
+      tokenType: 'access',
+      roles: ['member'],
+    });
+
+    expect(service.renewMyMembership).toHaveBeenCalledWith('user-1');
+    expect(result.checkoutUrl).toBe('https://stripe.com/renew');
+  });
+
+  it('changeMyMembershipPlan should pass user.sub and targetMembershipId', async () => {
+    service.changeMyMembershipPlan.mockResolvedValue({
+      checkoutUrl: 'https://stripe.com/change-plan',
+    });
+
+    const result = await controller.changeMyMembershipPlan(
+      {
+        sub: 'user-1',
+        email: 'test@test.com',
+        tokenType: 'access',
+        roles: ['member'],
+      },
+      {
+        targetMembershipId: '11111111-2222-3333-4444-555555555555',
+      },
+    );
+
+    expect(service.changeMyMembershipPlan).toHaveBeenCalledWith(
+      'user-1',
+      '11111111-2222-3333-4444-555555555555',
+    );
+    expect(result.checkoutUrl).toBe('https://stripe.com/change-plan');
   });
 });

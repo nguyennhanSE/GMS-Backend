@@ -12,6 +12,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
+import { ChangeMembershipPlanDto } from './dto/change-membership-plan.dto';
 import { Roles } from '../../libs/decorator/roles.decorator';
 import { ERoleName } from '../roles/enums/role.enum';
 import { CurrentUser } from '../../libs/decorator/current-user.decorator';
@@ -40,6 +41,31 @@ export class MembershipsController {
   @ApiOperation({ summary: 'Get my active membership' })
   findMyMembership(@CurrentUser() user: RequestUser) {
     return this.membershipsService.findMyMembership(user.sub);
+  }
+
+  @Post('my/renew')
+  @Roles(ERoleName.MEMBER)
+  @ApiOperation({
+    summary: 'Renew the authenticated member active membership via Stripe checkout',
+  })
+  renewMyMembership(@CurrentUser() user: RequestUser) {
+    return this.membershipsService.renewMyMembership(user.sub);
+  }
+
+  @Post('my/change-plan')
+  @Roles(ERoleName.MEMBER)
+  @ApiOperation({
+    summary:
+      'Create a Stripe checkout to change the authenticated member active membership tier',
+  })
+  changeMyMembershipPlan(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: ChangeMembershipPlanDto,
+  ) {
+    return this.membershipsService.changeMyMembershipPlan(
+      user.sub,
+      dto.targetMembershipId,
+    );
   }
 
   @Get(':id')

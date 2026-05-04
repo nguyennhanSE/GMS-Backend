@@ -89,6 +89,23 @@ export class MembershipsService {
     return active;
   }
 
+  async renewMyMembership(userId: string) {
+    const activeMembership = await this.requireActiveMembership(userId);
+    return this.initiateCheckout(activeMembership.membershipId, userId);
+  }
+
+  async changeMyMembershipPlan(userId: string, targetMembershipId: string) {
+    const activeMembership = await this.requireActiveMembership(userId);
+
+    if (activeMembership.membershipId === targetMembershipId) {
+      throw new BadRequestException(
+        'Target membership matches your current active tier. Use renew instead.',
+      );
+    }
+
+    return this.initiateCheckout(targetMembershipId, userId);
+  }
+
   async update(id: string, dto: UpdateMembershipDto) {
     await this.findOne(id);
     const updated = await this.prisma.membership.update({
@@ -289,5 +306,17 @@ export class MembershipsService {
       `Deactivated membership ${userMembership.membershipName} for payment ${paymentId}`,
     );
     return true;
+  }
+
+  private async requireActiveMembership(userId: string) {
+    const activeMembership = await this.findMyMembership(userId);
+
+    if (!activeMembership) {
+      throw new BadRequestException(
+        'Active membership required. Use membership checkout to purchase a tier first.',
+      );
+    }
+
+    return activeMembership;
   }
 }

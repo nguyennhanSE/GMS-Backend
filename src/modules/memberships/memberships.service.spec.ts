@@ -200,6 +200,112 @@ describe('MembershipsService', () => {
     });
   });
 
+  describe('member actions', () => {
+    const activeMembership = {
+      id: 'user-membership-1',
+      userId: 'user-1',
+      membershipId: 'tier-current',
+      status: 'normal',
+      endDate: new Date('2026-12-31T00:00:00.000Z'),
+      membership: {
+        id: 'tier-current',
+        name: 'Current Tier',
+        purchasePrice: 480000,
+      },
+    };
+
+    it('renew should derive the current tier and checkout price server-side', async () => {
+      prisma.userMembership.findFirst.mockResolvedValue(activeMembership);
+      prisma.membership.findUnique.mockResolvedValue({
+        id: 'tier-current',
+        name: 'Current Tier',
+        purchasePrice: 480000,
+        minPrice: 500000,
+      });
+      paymentService.createCheckout.mockResolvedValue({
+        checkoutUrl: 'https://stripe.com/renew',
+      });
+
+      const result = await service.renewMyMembership('user-1');
+
+      expect(paymentService.createCheckout).toHaveBeenCalledWith('user-1', {
+        targetType: 'MEMBERSHIP',
+        targetId: 'tier-current',
+        amount: 480000,
+        currency: 'VND',
+      });
+      expect(result).toEqual({
+        checkoutUrl: 'https://stripe.com/renew',
+      });
+    });
+
+    it('renew should reject users with no active membership', async () => {
+      prisma.userMembership.findFirst.mockResolvedValue(null);
+
+      await expect(service.renewMyMembership('user-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(paymentService.createCheckout).not.toHaveBeenCalled();
+    });
+
+    it('change-plan should checkout the requested valid tier for the authenticated member', async () => {
+      prisma.userMembership.findFirst.mockResolvedValue(activeMembership);
+      prisma.membership.findUnique.mockResolvedValue({
+        id: 'tier-next',
+        name: 'Next Tier',
+        purchasePrice: 650000,
+        minPrice: 700000,
+      });
+      paymentService.createCheckout.mockResolvedValue({
+        checkoutUrl: 'https://stripe.com/change-plan',
+      });
+
+      const result = await service.changeMyMembershipPlan(
+        'user-1',
+        'tier-next',
+      );
+
+      expect(paymentService.createCheckout).toHaveBeenCalledWith('user-1', {
+        targetType: 'MEMBERSHIP',
+        targetId: 'tier-next',
+        amount: 650000,
+        currency: 'VND',
+      });
+      expect(result).toEqual({
+        checkoutUrl: 'https://stripe.com/change-plan',
+      });
+    });
+
+    it('change-plan should reject users with no active membership', async () => {
+      prisma.userMembership.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.changeMyMembershipPlan('user-1', 'tier-next'),
+      ).rejects.toThrow(BadRequestException);
+      expect(paymentService.createCheckout).not.toHaveBeenCalled();
+    });
+
+    it('change-plan should reject unknown target tiers', async () => {
+      prisma.userMembership.findFirst.mockResolvedValue(activeMembership);
+      prisma.membership.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.changeMyMembershipPlan('user-1', 'tier-missing'),
+      ).rejects.toThrow(NotFoundException);
+      expect(paymentService.createCheckout).not.toHaveBeenCalled();
+    });
+
+    it('change-plan should reject same-tier targets and direct callers to renew', async () => {
+      prisma.userMembership.findFirst.mockResolvedValue(activeMembership);
+
+      await expect(
+        service.changeMyMembershipPlan('user-1', 'tier-current'),
+      ).rejects.toThrow(BadRequestException);
+      expect(paymentService.createCheckout).not.toHaveBeenCalled();
+      expect(prisma.membership.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
   describe('activateByPayment', () => {
     const mockMembership = {
       id: 'tier-1',

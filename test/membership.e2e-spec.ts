@@ -4,13 +4,13 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../src/modules/payment/stripe.service';
 import { MembershipsService } from '../src/modules/memberships/memberships.service';
-import { randomUUID } from 'crypto';
 import {
   TestData,
   loginAs,
   authRequest,
   createTestData,
   cleanupTestData,
+  getErrorMessage,
 } from './test-helpers';
 
 /**
@@ -147,8 +147,34 @@ describe('Membership Integration (e2e)', () => {
             'IntegTest Deletable',
             'IntegTest Undeletable',
             'IntegTest CRUD',
+            'IntegTest Current Basic',
+            'IntegTest Change Current',
           ],
         },
+      },
+    });
+  }
+
+  async function createActiveMembershipRecord(
+    membershipId: string,
+    membershipName: string,
+    level: 'BASIC' | 'PREMIUM',
+    paymentId?: string,
+  ) {
+    const oneYearFromNow = new Date();
+    oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+
+    return prisma.userMembership.create({
+      data: {
+        userId: testData.memberUser.id,
+        membershipId,
+        membershipName,
+        membershipDescription: `${membershipName} active membership`,
+        level,
+        status: 'normal',
+        startDate: new Date(),
+        endDate: oneYearFromNow,
+        paymentId,
       },
     });
   }
@@ -355,6 +381,189 @@ describe('Membership Integration (e2e)', () => {
         .send();
 
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('POST /memberships/my/renew', () => {
+    it('[Test 10.1] Should create checkout for the active membership tier', async () => {
+      if (!memberToken) return;
+
+      await createActiveMembershipRecord(
+        testTier.id,
+        'IntegTest Premium',
+        'PREMIUM',
+      );
+
+      const response = await authRequest(app, memberToken)
+        .post('/memberships/my/renew')
+        .send();
+
+      expect(response.status).toBe(201);
+      expect(response.body.checkoutUrl).toBe(
+        'https://checkout.stripe.com/membership-test',
+      );
+      expect(mockStripeService.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: testData.memberUser.id,
+          targetType: 'MEMBERSHIP',
+          targetId: testTier.id,
+          amount: 480000,
+          currency: 'VND',
+        }),
+      );
+    });
+
+    it('[Test 10.2] Should reject renew when the member has no active membership', async () => {
+      if (!memberToken) return;
+
+      const response = await authRequest(app, memberToken)
+        .post('/memberships/my/renew')
+        .send();
+
+      expect(response.status).toBe(400);
+      expect(getErrorMessage(response.body)).toContain(
+        'Active membership required',
+      );
+    });
+
+    it('[Test 10.3] Should reuse an existing valid pending checkout session on repeated renew calls', async () => {
+      if (!memberToken) return;
+
+      await createActiveMembershipRecord(
+        testTier.id,
+        'IntegTest Premium',
+        'PREMIUM',
+      );
+
+      const first = await authRequest(app, memberToken)
+        .post('/memberships/my/renew')
+        .send();
+      const second = await authRequest(app, memberToken)
+        .post('/memberships/my/renew')
+        .send();
+
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(201);
+      expect(second.body.checkoutUrl).toBe(first.body.checkoutUrl);
+      expect(mockStripeService.createCheckoutSession).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('POST /memberships/my/change-plan', () => {
+    it('[Test 10.4] Should create checkout for a different valid target tier', async () => {
+      if (!memberToken) return;
+
+      const currentTier = await prisma.membership.create({
+        data: {
+          name: 'IntegTest Current Basic',
+          minPrice: 100000,
+          purchasePrice: 95000,
+          level: 'BASIC',
+        },
+      });
+
+      try {
+        await createActiveMembershipRecord(
+          currentTier.id,
+          'IntegTest Current Basic',
+          'BASIC',
+        );
+
+        const response = await authRequest(app, memberToken)
+          .post('/memberships/my/change-plan')
+          .send({ targetMembershipId: testTier.id });
+
+        expect(response.status).toBe(201);
+        expect(response.body.checkoutUrl).toBe(
+          'https://checkout.stripe.com/membership-test',
+        );
+        expect(mockStripeService.createCheckoutSession).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: testData.memberUser.id,
+            targetType: 'MEMBERSHIP',
+            targetId: testTier.id,
+            amount: 480000,
+            currency: 'VND',
+          }),
+        );
+      } finally {
+        await prisma.userMembership.deleteMany({
+          where: { membershipId: currentTier.id },
+        });
+        await prisma.membership.delete({ where: { id: currentTier.id } });
+      }
+    });
+
+    it('[Test 10.5] Should reject invalid targetMembershipId values through DTO validation', async () => {
+      if (!memberToken) return;
+
+      await createActiveMembershipRecord(
+        testTier.id,
+        'IntegTest Premium',
+        'PREMIUM',
+      );
+
+      const response = await authRequest(app, memberToken)
+        .post('/memberships/my/change-plan')
+        .send({ targetMembershipId: 'not-a-uuid' });
+
+      expect(response.status).toBe(400);
+      expect(getErrorMessage(response.body)).toContain('UUID');
+    });
+
+    it('[Test 10.6] Should reject same-tier change-plan requests and direct callers to renew', async () => {
+      if (!memberToken) return;
+
+      await createActiveMembershipRecord(
+        testTier.id,
+        'IntegTest Premium',
+        'PREMIUM',
+      );
+
+      const response = await authRequest(app, memberToken)
+        .post('/memberships/my/change-plan')
+        .send({ targetMembershipId: testTier.id });
+
+      expect(response.status).toBe(400);
+      expect(getErrorMessage(response.body)).toContain('Use renew instead');
+    });
+
+    it('[Test 10.7] Should reuse an existing valid pending checkout session on repeated change-plan calls', async () => {
+      if (!memberToken) return;
+
+      const currentTier = await prisma.membership.create({
+        data: {
+          name: 'IntegTest Change Current',
+          minPrice: 110000,
+          purchasePrice: 100000,
+          level: 'BASIC',
+        },
+      });
+
+      try {
+        await createActiveMembershipRecord(
+          currentTier.id,
+          'IntegTest Change Current',
+          'BASIC',
+        );
+
+        const first = await authRequest(app, memberToken)
+          .post('/memberships/my/change-plan')
+          .send({ targetMembershipId: testTier.id });
+        const second = await authRequest(app, memberToken)
+          .post('/memberships/my/change-plan')
+          .send({ targetMembershipId: testTier.id });
+
+        expect(first.status).toBe(201);
+        expect(second.status).toBe(201);
+        expect(second.body.checkoutUrl).toBe(first.body.checkoutUrl);
+        expect(mockStripeService.createCheckoutSession).toHaveBeenCalledTimes(1);
+      } finally {
+        await prisma.userMembership.deleteMany({
+          where: { membershipId: currentTier.id },
+        });
+        await prisma.membership.delete({ where: { id: currentTier.id } });
+      }
     });
   });
 

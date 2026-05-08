@@ -531,8 +531,7 @@ test.describe('Playwright API E2E', () => {
       );
 
       const temporaryServer = await startTemporaryApiServer({
-        EMAIL_USER: '',
-        EMAIL_PASSWORD: '',
+        RESEND_API_KEY: '',
       });
       const tempAnonymousApi = await createApiContext(
         undefined,

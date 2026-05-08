@@ -3,7 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as supertest from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../prisma/prisma.service';
-import { NodemailerService } from '../src/libs/integration/nodemailer/nodemailer.service';
+import { EMAIL_DELIVERY_SERVICE } from '../src/modules/email/email.interface';
 import { config } from '../src/libs/config';
 import {
   TestData,
@@ -15,7 +15,7 @@ import {
 
 /**
  * Integration tests for the Support Feedback module.
- * Uses real DB (Prisma), mocks NodemailerService (external SMTP).
+ * Uses real DB (Prisma), mocks the external email delivery service.
  *
  * Covers:
  * 1. POST /support/feedback — happy path (authenticated member)
@@ -29,17 +29,26 @@ describe('Support Feedback (e2e)', () => {
   let prisma: PrismaService;
   let testData: TestData;
   let memberToken: string;
+  const SUPPORT_ADMIN_EMAIL = 'support-admin@test.local';
+  const SUPPORT_FROM_EMAIL = 'GMS <support-bot@test.local>';
+  const originalEmailConfig = {
+    EMAIL_FROM: config.EMAIL_FROM,
+    SUPPORT_EMAIL_TO: config.SUPPORT_EMAIL_TO,
+  };
 
-  const mockNodemailerService = {
+  const mockEmailDeliveryService = {
     sendEmail: jest.fn().mockResolvedValue(true),
   };
 
   beforeAll(async () => {
+    config.SUPPORT_EMAIL_TO = SUPPORT_ADMIN_EMAIL;
+    config.EMAIL_FROM = SUPPORT_FROM_EMAIL;
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(NodemailerService)
-      .useValue(mockNodemailerService)
+      .overrideProvider(EMAIL_DELIVERY_SERVICE)
+      .useValue(mockEmailDeliveryService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -76,6 +85,8 @@ describe('Support Feedback (e2e)', () => {
       await cleanupTestData(prisma);
     }
     if (app) await app.close();
+    config.EMAIL_FROM = originalEmailConfig.EMAIL_FROM;
+    config.SUPPORT_EMAIL_TO = originalEmailConfig.SUPPORT_EMAIL_TO;
   });
 
   afterEach(async () => {
@@ -83,7 +94,7 @@ describe('Support Feedback (e2e)', () => {
     await prisma.feedback.deleteMany({
       where: { userId: testData.memberUser.id },
     });
-    mockNodemailerService.sendEmail.mockClear();
+    mockEmailDeliveryService.sendEmail.mockClear();
   });
 
   async function cleanupFeedbackTestData(p: PrismaService) {
@@ -156,11 +167,11 @@ describe('Support Feedback (e2e)', () => {
       // Give fire-and-forget a moment to execute
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(mockNodemailerService.sendEmail).toHaveBeenCalledTimes(1);
-      expect(mockNodemailerService.sendEmail).toHaveBeenCalledWith(
+      expect(mockEmailDeliveryService.sendEmail).toHaveBeenCalledTimes(1);
+      expect(mockEmailDeliveryService.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          to: config.EMAIL_USER,
-          from: config.EMAIL_FROM || config.EMAIL_USER,
+          to: config.SUPPORT_EMAIL_TO,
+          from: config.EMAIL_FROM,
           replyTo: testData.memberUser.email,
           subject: expect.stringContaining('[Support Feedback]'),
         }),
@@ -270,8 +281,8 @@ describe('Support Feedback (e2e)', () => {
       if (!memberToken) return;
 
       // Make email throw
-      mockNodemailerService.sendEmail.mockRejectedValueOnce(
-        new Error('SMTP connection refused'),
+      mockEmailDeliveryService.sendEmail.mockRejectedValueOnce(
+        new Error('Email API connection refused'),
       );
 
       const response = await authRequest(app, memberToken)
@@ -295,15 +306,15 @@ describe('Support Feedback (e2e)', () => {
     it('[Test 12] Should still return 201 when email times out', async () => {
       if (!memberToken) return;
 
-      // Simulate slow SMTP (never resolves within test timeout)
-      mockNodemailerService.sendEmail.mockImplementationOnce(
+      // Simulate slow email delivery (never resolves within test timeout)
+      mockEmailDeliveryService.sendEmail.mockImplementationOnce(
         () => new Promise((resolve) => setTimeout(resolve, 5000)),
       );
 
       const response = await authRequest(app, memberToken)
         .post('/support/feedback')
         .send({
-          subject: 'Slow SMTP',
+          subject: 'Slow email delivery',
           message: 'Response should not wait for email',
         });
 

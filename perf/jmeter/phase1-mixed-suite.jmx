@@ -1,0 +1,1646 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="GMS Backend Phase 1 Mixed API Suite" enabled="true">
+      <stringProp name="TestPlan.comments">Mixed-critical API performance suite for auth, reads, class booking checkout, and Stripe webhook handling.</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="baseUrl" elementType="Argument">
+            <stringProp name="Argument.name">baseUrl</stringProp>
+            <stringProp name="Argument.value">${__P(baseUrl,http://localhost:3501/api/v1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="adminUsername" elementType="Argument">
+            <stringProp name="Argument.name">adminUsername</stringProp>
+            <stringProp name="Argument.value">${__P(adminUsername,admin@gym.local)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="adminPassword" elementType="Argument">
+            <stringProp name="Argument.name">adminPassword</stringProp>
+            <stringProp name="Argument.value">${__P(adminPassword,Admin@123456)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="memberUsername" elementType="Argument">
+            <stringProp name="Argument.name">memberUsername</stringProp>
+            <stringProp name="Argument.value">${__P(memberUsername,member@gym.local)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="memberPassword" elementType="Argument">
+            <stringProp name="Argument.name">memberPassword</stringProp>
+            <stringProp name="Argument.value">${__P(memberPassword,Member@123456)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="trainerUsername" elementType="Argument">
+            <stringProp name="Argument.name">trainerUsername</stringProp>
+            <stringProp name="Argument.value">${__P(trainerUsername,trainer@gym.local)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="trainerPassword" elementType="Argument">
+            <stringProp name="Argument.name">trainerPassword</stringProp>
+            <stringProp name="Argument.value">${__P(trainerPassword,Trainer@123456)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="jdbcDriver" elementType="Argument">
+            <stringProp name="Argument.name">jdbcDriver</stringProp>
+            <stringProp name="Argument.value">${__P(jdbcDriver,org.postgresql.Driver)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="jdbcUrl" elementType="Argument">
+            <stringProp name="Argument.name">jdbcUrl</stringProp>
+            <stringProp name="Argument.value">${__P(jdbcUrl,jdbc:postgresql://localhost:5432/gms?currentSchema=public)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="jdbcUsername" elementType="Argument">
+            <stringProp name="Argument.name">jdbcUsername</stringProp>
+            <stringProp name="Argument.value">${__P(jdbcUsername,postgres)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="jdbcPassword" elementType="Argument">
+            <stringProp name="Argument.name">jdbcPassword</stringProp>
+            <stringProp name="Argument.value">${__P(jdbcPassword,CHANGE_ME)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="stripeWebhookSecret" elementType="Argument">
+            <stringProp name="Argument.name">stripeWebhookSecret</stringProp>
+            <stringProp name="Argument.value">${__P(stripeWebhookSecret,CHANGE_ME)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="redisHost" elementType="Argument">
+            <stringProp name="Argument.name">redisHost</stringProp>
+            <stringProp name="Argument.value">${__P(redisHost,127.0.0.1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="redisPort" elementType="Argument">
+            <stringProp name="Argument.name">redisPort</stringProp>
+            <stringProp name="Argument.value">${__P(redisPort,6379)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="rabbitmqHost" elementType="Argument">
+            <stringProp name="Argument.name">rabbitmqHost</stringProp>
+            <stringProp name="Argument.value">${__P(rabbitmqHost,127.0.0.1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="rabbitmqPort" elementType="Argument">
+            <stringProp name="Argument.name">rabbitmqPort</stringProp>
+            <stringProp name="Argument.value">${__P(rabbitmqPort,5672)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="classScheduleLimit" elementType="Argument">
+            <stringProp name="Argument.name">classScheduleLimit</stringProp>
+            <stringProp name="Argument.value">${__P(classScheduleLimit,25)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="requireJdbc" elementType="Argument">
+            <stringProp name="Argument.name">requireJdbc</stringProp>
+            <stringProp name="Argument.value">${__P(requireJdbc,true)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="requireStripe" elementType="Argument">
+            <stringProp name="Argument.name">requireStripe</stringProp>
+            <stringProp name="Argument.value">${__P(requireStripe,true)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+      <stringProp name="TestPlan.user_define_classpath" />
+    </TestPlan>
+    <hashTree>
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults" enabled="true">
+        <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+          <collectionProp name="Arguments.arguments" />
+        </elementProp>
+        <stringProp name="HTTPSampler.domain">${__property(perf.apiHost,localhost)}</stringProp>
+        <stringProp name="HTTPSampler.port">${__property(perf.apiPort,3501)}</stringProp>
+        <stringProp name="HTTPSampler.protocol">${__property(perf.apiScheme,http)}</stringProp>
+        <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+        <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+        <stringProp name="HTTPSampler.path"></stringProp>
+        <stringProp name="HTTPSampler.concurrentPool">6</stringProp>
+        <stringProp name="HTTPSampler.connect_timeout">10000</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">30000</stringProp>
+      </ConfigTestElement>
+      <hashTree />
+      <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="Preflight" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.duration"></stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </SetupThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Validate Runtime Prerequisites" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import java.net.URI
+import java.net.InetSocketAddress
+import java.net.Socket
+
+def uri = new URI(vars.get('baseUrl'))
+def scheme = uri.getScheme() ?: 'http'
+def host = uri.getHost() ?: 'localhost'
+def port = uri.getPort() &gt; 0 ? uri.getPort() : (scheme == 'https' ? 443 : 80)
+def path = uri.getPath() ?: ''
+if (path.endsWith('/')) {
+  path = path.substring(0, path.length() - 1)
+}
+
+props.put('perf.apiScheme', scheme)
+props.put('perf.apiHost', host)
+props.put('perf.apiPort', String.valueOf(port))
+props.put('perf.apiBasePath', path)
+
+def requireJdbc = 'true'.equalsIgnoreCase(vars.get('requireJdbc'))
+def requireStripe = 'true'.equalsIgnoreCase(vars.get('requireStripe'))
+
+def stripeSecret = vars.get('stripeWebhookSecret')
+if (requireStripe &amp;&amp; (!stripeSecret || stripeSecret == 'CHANGE_ME')) {
+  throw new IllegalStateException('stripeWebhookSecret must be set for webhook scenarios')
+}
+
+if (requireJdbc) {
+  try {
+    Class.forName(vars.get('jdbcDriver'))
+  } catch (ClassNotFoundException ex) {
+    throw new IllegalStateException('PostgreSQL JDBC driver not found in JMeter lib: ' + vars.get('jdbcDriver'))
+  }
+
+  if (!vars.get('jdbcPassword') || vars.get('jdbcPassword') == 'CHANGE_ME') {
+    throw new IllegalStateException('jdbcPassword must be set for DB lookup scenarios')
+  }
+}
+
+[
+  [name: 'redis', host: vars.get('redisHost'), port: vars.get('redisPort') as int],
+  [name: 'rabbitmq', host: vars.get('rabbitmqHost'), port: vars.get('rabbitmqPort') as int],
+].each { target -&gt;
+  Socket socket = new Socket()
+  try {
+    socket.connect(new InetSocketAddress(target.host as String, target.port as int), 3000)
+  } finally {
+    try {
+      socket.close()
+    } catch (ignored) {
+    }
+  }
+}
+
+log.info('Preflight completed for ' + vars.get('baseUrl'))</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Headers" enabled="true">
+          <collectionProp name="HeaderManager.headers">
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">Accept</stringProp>
+              <stringProp name="Header.value">application/json</stringProp>
+            </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">Content-Type</stringProp>
+              <stringProp name="Header.value">application/json</stringProp>
+            </elementProp>
+          </collectionProp>
+        </HeaderManager>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Health Check" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${__property(perf.apiBasePath,)}/health</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+        </HTTPSamplerProxy>
+        <hashTree />
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Smoke" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">${__P(smokeLoops,1)}</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(smokeThreads,1)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(smokeRampUpSeconds,1)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.duration"></stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Smoke Setup" enabled="true" />
+        <hashTree>
+          <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Init Smoke Thread" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import java.net.URI
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneOffset
+
+def uri = new URI(vars.get('baseUrl'))
+def scheme = uri.getScheme() ?: 'http'
+def host = uri.getHost() ?: 'localhost'
+def port = uri.getPort() &gt; 0 ? uri.getPort() : (scheme == 'https' ? 443 : 80)
+def path = uri.getPath() ?: ''
+if (path.endsWith('/')) {
+  path = path.substring(0, path.length() - 1)
+}
+
+vars.put('apiScheme', scheme)
+vars.put('apiHost', host)
+vars.put('apiPort', String.valueOf(port))
+vars.put('apiBasePath', path)
+
+def today = LocalDate.now(ZoneOffset.UTC)
+int delta = (DayOfWeek.MONDAY.getValue() - today.getDayOfWeek().getValue() + 7) % 7
+if (delta == 0) {
+  delta = 7
+}
+def nextMonday = today.plusDays(delta)
+vars.put('targetDate', nextMonday.toString())</stringProp>
+          </JSR223Sampler>
+          <hashTree />
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Admin Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${adminUsername}&quot;,&quot;password&quot;:&quot;${adminPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Admin Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+def userId = body.data?.user?.id
+if (!accessToken || !userId) {
+  throw new IllegalStateException('Admin login did not return access token and user id. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('adminAccessToken', accessToken as String)
+vars.put('adminUserId', userId as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Member Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${memberUsername}&quot;,&quot;password&quot;:&quot;${memberPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Member Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+def userId = body.data?.user?.id
+if (!accessToken || !userId) {
+  throw new IllegalStateException('Member login did not return access token and user id. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('memberAccessToken', accessToken as String)
+vars.put('memberUserId', userId as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Trainer Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${trainerUsername}&quot;,&quot;password&quot;:&quot;${trainerPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Trainer Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+def userId = body.data?.user?.id
+if (!accessToken || !userId) {
+  throw new IllegalStateException('Trainer login did not return access token and user id. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('trainerAccessToken', accessToken as String)
+vars.put('trainerUserId', userId as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Discover Class Schedule" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments" />
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/class-schedule/list?date=${targetDate}&amp;limit=${classScheduleLimit}</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+              <collectionProp name="HeaderManager.headers">
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Accept</stringProp>
+                  <stringProp name="Header.value">application/json</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Authorization</stringProp>
+                  <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </HeaderManager>
+            <hashTree />
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Class Schedule" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+if (!(prev.getResponseCode()?.startsWith('2'))) {
+  throw new IllegalStateException('Class schedule discovery failed. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+def body = new JsonSlurper().parseText(responseBody)
+def docs = body.data?.docs ?: []
+if (docs.isEmpty()) {
+  throw new IllegalStateException('No schedules returned for ' + vars.get('targetDate') + '. body=' + responseBody)
+}
+def schedule = docs.size() > 1 ? docs[1] : docs[0]
+def scheduleDay = (schedule.daysOfWeek ?: [schedule.dayOfWeek]).find { it }
+if (!scheduleDay) {
+  throw new IllegalStateException('Selected schedule did not expose dayOfWeek or daysOfWeek. body=' + responseBody)
+}
+vars.put('classScheduleId', schedule.id as String)
+vars.put('classScheduleDay', scheduleDay as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET Class Schedule List" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-schedule/list?date=${targetDate}&amp;limit=${classScheduleLimit}</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET Trainer Availability" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/trainer/${trainerUserId}/availability</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET Exercises" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/exercises</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Build Smoke Booking Payload" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import groovy.json.JsonOutput
+import java.time.LocalDate
+
+def dayMap = [SUN:0, MON:1, TUE:2, WED:3, THU:4, FRI:5, SAT:6]
+def scheduleDay = vars.get('classScheduleDay')
+if (!scheduleDay || !dayMap.containsKey(scheduleDay)) {
+  throw new IllegalStateException('Missing classScheduleDay for smoke booking payload: ' + scheduleDay)
+}
+
+vars.remove('bookingId')
+vars.remove('checkoutUrl')
+vars.remove('providerSessionId')
+
+def baseDate = LocalDate.parse(vars.get('targetDate'))
+def baseDay = baseDate.getDayOfWeek().getValue() % 7
+def dayDelta = (dayMap[scheduleDay] - baseDay + 7) % 7
+def startDate = baseDate.plusDays(dayDelta + 35L)
+def endDate = startDate.plusDays(1)
+vars.put('bookingPayload', JsonOutput.toJson([
+  userId: vars.get('memberUserId'),
+  classScheduleId: [vars.get('classScheduleId')],
+  bookingStartDate: startDate.toString(),
+  bookingEndDate: endDate.toString(),
+]))
+</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Class Booking Create" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${bookingPayload}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-booking/create</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Admin Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${adminAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Booking Id" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def items = body.data ?: []
+if (items.isEmpty() || !items[0]?.id) {
+  throw new IllegalStateException('Booking create returned no items. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('bookingId', items[0].id as String)</stringProp>
+          </JSR223PostProcessor>
+          <hashTree />
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Class Booking Checkout" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-booking/${bookingId}/checkout</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Checkout Url" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+if (!(prev.getResponseCode()?.startsWith('2'))) {
+  throw new IllegalStateException('Checkout request failed. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+def body = new JsonSlurper().parseText(responseBody)
+def checkoutUrl = body.data?.checkoutUrl
+if (!checkoutUrl) {
+  throw new IllegalStateException('Checkout response did not contain data.checkoutUrl. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('checkoutUrl', checkoutUrl as String)</stringProp>
+          </JSR223PostProcessor>
+          <hashTree />
+        </hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Lookup Provider Session Id" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import java.sql.DriverManager
+
+Class.forName(vars.get('jdbcDriver'))
+def conn = DriverManager.getConnection(vars.get('jdbcUrl'), vars.get('jdbcUsername'), vars.get('jdbcPassword'))
+try {
+  def sql = 'select provider_session_id from payments where target_type::text = ? and target_id = ?::uuid order by created_at desc limit 1'
+  def stmt = conn.prepareStatement(sql)
+  stmt.setString(1, 'CLASS_BOOKING')
+  stmt.setString(2, vars.get('bookingId'))
+  def rs = stmt.executeQuery()
+  if (!rs.next()) {
+    throw new IllegalStateException('No provider_session_id found for booking ' + vars.get('bookingId'))
+  }
+  vars.put('providerSessionId', rs.getString(1))
+  rs.close()
+  stmt.close()
+} finally {
+  conn.close()
+}</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Build Stripe Webhook Event" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import groovy.json.JsonOutput
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+
+def payload = JsonOutput.toJson([
+  id: 'evt_smoke_' + System.currentTimeMillis(),
+  object: 'event',
+  type: 'checkout.session.completed',
+  data: [
+    object: [
+      id: vars.get('providerSessionId'),
+      payment_intent: 'pi_smoke_' + System.currentTimeMillis(),
+    ],
+  ],
+])
+
+def timestamp = (System.currentTimeMillis() / 1000L) as long
+def signedPayload = timestamp + '.' + payload
+def mac = Mac.getInstance('HmacSHA256')
+mac.init(new SecretKeySpec(vars.get('stripeWebhookSecret').getBytes('UTF-8'), 'HmacSHA256'))
+def digest = mac.doFinal(signedPayload.getBytes('UTF-8')).encodeHex().toString()
+
+vars.put('stripePayload', payload)
+vars.put('stripeSignature', 't=' + timestamp + ',v1=' + digest)</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Stripe Webhook" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${stripePayload}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/payments/webhook/stripe</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Stripe Headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">stripe-signature</stringProp>
+                <stringProp name="Header.value">${stripeSignature}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Read Heavy" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">true</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(readThreads,12)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(readRampUpSeconds,180)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(readDurationSeconds,900)}</stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Read Setup" enabled="true" />
+        <hashTree>
+          <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Init Read Thread" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import java.net.URI
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneOffset
+
+def uri = new URI(vars.get('baseUrl'))
+def path = uri.getPath() ?: ''
+if (path.endsWith('/')) {
+  path = path.substring(0, path.length() - 1)
+}
+vars.put('apiBasePath', path)
+
+def today = LocalDate.now(ZoneOffset.UTC)
+int delta = (DayOfWeek.MONDAY.getValue() - today.getDayOfWeek().getValue() + 7) % 7
+if (delta == 0) {
+  delta = 7
+}
+vars.put('targetDate', today.plusDays(delta).toString())</stringProp>
+          </JSR223Sampler>
+          <hashTree />
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Member Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${memberUsername}&quot;,&quot;password&quot;:&quot;${memberPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Member Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+if (!accessToken) {
+  throw new IllegalStateException('Member login did not return access token. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('memberAccessToken', accessToken as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Trainer Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${trainerUsername}&quot;,&quot;password&quot;:&quot;${trainerPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Trainer Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def userId = body.data?.user?.id
+if (!userId) {
+  throw new IllegalStateException('Trainer login did not return user id. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('trainerUserId', userId as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+        </hashTree>
+        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Read Think Time" enabled="true">
+          <stringProp name="ConstantTimer.delay">${__P(readThinkTimeMs,150)}</stringProp>
+        </ConstantTimer>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET Class Schedule List" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-schedule/list?date=${targetDate}&amp;limit=${classScheduleLimit}</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Read Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET Trainer Availability" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/trainer/${trainerUserId}/availability</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Read Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET Exercises" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/exercises</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Read Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Auth Load" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">true</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(authThreads,4)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(authRampUpSeconds,120)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(authDurationSeconds,600)}</stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Headers" enabled="true">
+          <collectionProp name="HeaderManager.headers">
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">Accept</stringProp>
+              <stringProp name="Header.value">application/json</stringProp>
+            </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">Content-Type</stringProp>
+              <stringProp name="Header.value">application/json</stringProp>
+            </elementProp>
+          </collectionProp>
+        </HeaderManager>
+        <hashTree />
+        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Auth Think Time" enabled="true">
+          <stringProp name="ConstantTimer.delay">${__P(authThinkTimeMs,250)}</stringProp>
+        </ConstantTimer>
+        <hashTree />
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Init Auth Thread" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import java.net.URI
+def uri = new URI(vars.get('baseUrl'))
+def path = uri.getPath() ?: ''
+if (path.endsWith('/')) {
+  path = path.substring(0, path.length() - 1)
+}
+vars.put('apiBasePath', path)</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Admin Login" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">{&quot;username&quot;:&quot;${adminUsername}&quot;,&quot;password&quot;:&quot;${adminPassword}&quot;}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Member Login" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">{&quot;username&quot;:&quot;${memberUsername}&quot;,&quot;password&quot;:&quot;${memberPassword}&quot;}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Trainer Login" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">{&quot;username&quot;:&quot;${trainerUsername}&quot;,&quot;password&quot;:&quot;${trainerPassword}&quot;}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree />
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Transactions" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">true</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(transactionThreads,2)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(transactionRampUpSeconds,120)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(transactionDurationSeconds,600)}</stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Transaction Setup" enabled="true" />
+        <hashTree>
+          <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Init Transaction Thread" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import java.net.URI
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneOffset
+
+def uri = new URI(vars.get('baseUrl'))
+def path = uri.getPath() ?: ''
+if (path.endsWith('/')) {
+  path = path.substring(0, path.length() - 1)
+}
+vars.put('apiBasePath', path)
+
+def today = LocalDate.now(ZoneOffset.UTC)
+int delta = (DayOfWeek.MONDAY.getValue() - today.getDayOfWeek().getValue() + 7) % 7
+if (delta == 0) {
+  delta = 7
+}
+vars.put('targetDate', today.plusDays(delta).toString())</stringProp>
+          </JSR223Sampler>
+          <hashTree />
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Admin Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${adminUsername}&quot;,&quot;password&quot;:&quot;${adminPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Admin Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+if (!accessToken) {
+  throw new IllegalStateException('Admin login did not return access token. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('adminAccessToken', accessToken as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Member Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${memberUsername}&quot;,&quot;password&quot;:&quot;${memberPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Member Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+def userId = body.data?.user?.id
+if (!accessToken || !userId) {
+  throw new IllegalStateException('Member login did not return access token and user id. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('memberAccessToken', accessToken as String)
+vars.put('memberUserId', userId as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Discover Class Schedule" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments" />
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/class-schedule/list?date=${targetDate}&amp;limit=${classScheduleLimit}</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+              <collectionProp name="HeaderManager.headers">
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Accept</stringProp>
+                  <stringProp name="Header.value">application/json</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Authorization</stringProp>
+                  <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </HeaderManager>
+            <hashTree />
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Class Schedule" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+if (!(prev.getResponseCode()?.startsWith('2'))) {
+  throw new IllegalStateException('Class schedule discovery failed. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+def body = new JsonSlurper().parseText(responseBody)
+def docs = body.data?.docs ?: []
+if (docs.isEmpty()) {
+  throw new IllegalStateException('No schedules returned for ' + vars.get('targetDate') + '. body=' + responseBody)
+}
+def schedule = docs[0]
+def scheduleDay = (schedule.daysOfWeek ?: [schedule.dayOfWeek]).find { it }
+if (!scheduleDay) {
+  throw new IllegalStateException('Selected schedule did not expose dayOfWeek or daysOfWeek. body=' + responseBody)
+}
+vars.put('classScheduleId', schedule.id as String)
+vars.put('classScheduleDay', scheduleDay as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+        </hashTree>
+        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Transaction Think Time" enabled="true">
+          <stringProp name="ConstantTimer.delay">${__P(transactionThinkTimeMs,400)}</stringProp>
+        </ConstantTimer>
+        <hashTree />
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Build Booking Payload" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import groovy.json.JsonOutput
+import java.time.LocalDate
+
+def dayMap = [SUN:0, MON:1, TUE:2, WED:3, THU:4, FRI:5, SAT:6]
+def scheduleDay = vars.get('classScheduleDay')
+if (!scheduleDay || !dayMap.containsKey(scheduleDay)) {
+  throw new IllegalStateException('Missing classScheduleDay for transaction booking payload: ' + scheduleDay)
+}
+
+def sequence = (vars.get('bookingSequence') ?: '0') as int
+sequence++
+vars.put('bookingSequence', String.valueOf(sequence))
+vars.remove('bookingId')
+vars.remove('checkoutUrl')
+vars.remove('providerSessionId')
+
+def baseDate = LocalDate.parse(vars.get('targetDate'))
+def baseDay = baseDate.getDayOfWeek().getValue() % 7
+def dayDelta = (dayMap[scheduleDay] - baseDay + 7) % 7
+def weekOffset = 5000 + (sequence - 1) + (ctx.getThreadNum() * 1000)
+def startDate = baseDate.plusDays(dayDelta + (weekOffset * 7L))
+def endDate = startDate.plusDays(1)
+vars.put('bookingPayload', JsonOutput.toJson([
+  userId: vars.get('memberUserId'),
+  classScheduleId: [vars.get('classScheduleId')],
+  bookingStartDate: startDate.toString(),
+  bookingEndDate: endDate.toString(),
+]))</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Class Booking Create" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${bookingPayload}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-booking/create</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Admin Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${adminAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Booking Id" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def items = body.data ?: []
+if (items.isEmpty() || !items[0]?.id) {
+  throw new IllegalStateException('Booking create returned no items. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('bookingId', items[0].id as String)</stringProp>
+          </JSR223PostProcessor>
+          <hashTree />
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Class Booking Checkout" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-booking/${bookingId}/checkout</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Checkout Url" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+if (!(prev.getResponseCode()?.startsWith('2'))) {
+  throw new IllegalStateException('Checkout request failed. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+def body = new JsonSlurper().parseText(responseBody)
+def checkoutUrl = body.data?.checkoutUrl
+if (!checkoutUrl) {
+  throw new IllegalStateException('Checkout response did not contain data.checkoutUrl. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('checkoutUrl', checkoutUrl as String)</stringProp>
+          </JSR223PostProcessor>
+          <hashTree />
+        </hashTree>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Webhook Flow" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">true</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(webhookThreads,1)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(webhookRampUpSeconds,120)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(webhookDurationSeconds,600)}</stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Webhook Setup" enabled="true" />
+        <hashTree>
+          <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Init Webhook Thread" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import java.net.URI
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneOffset
+
+def uri = new URI(vars.get('baseUrl'))
+def path = uri.getPath() ?: ''
+if (path.endsWith('/')) {
+  path = path.substring(0, path.length() - 1)
+}
+vars.put('apiBasePath', path)
+
+def today = LocalDate.now(ZoneOffset.UTC)
+int delta = (DayOfWeek.MONDAY.getValue() - today.getDayOfWeek().getValue() + 7) % 7
+if (delta == 0) {
+  delta = 7
+}
+vars.put('targetDate', today.plusDays(delta).toString())</stringProp>
+          </JSR223Sampler>
+          <hashTree />
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Admin Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${adminUsername}&quot;,&quot;password&quot;:&quot;${adminPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Admin Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+if (!accessToken) {
+  throw new IllegalStateException('Admin login did not return access token. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('adminAccessToken', accessToken as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Member Login" enabled="true">
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{&quot;username&quot;:&quot;${memberUsername}&quot;,&quot;password&quot;:&quot;${memberPassword}&quot;}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/auth/login</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Member Login" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def accessToken = body.data?.accessToken
+def userId = body.data?.user?.id
+if (!accessToken || !userId) {
+  throw new IllegalStateException('Member login did not return access token and user id. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('memberAccessToken', accessToken as String)
+vars.put('memberUserId', userId as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Discover Class Schedule" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments" />
+            </elementProp>
+            <stringProp name="HTTPSampler.path">${apiBasePath}/class-schedule/list?date=${targetDate}&amp;limit=${classScheduleLimit}</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+              <collectionProp name="HeaderManager.headers">
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Accept</stringProp>
+                  <stringProp name="Header.value">application/json</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Authorization</stringProp>
+                  <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </HeaderManager>
+            <hashTree />
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Class Schedule" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+if (!(prev.getResponseCode()?.startsWith('2'))) {
+  throw new IllegalStateException('Class schedule discovery failed. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+def body = new JsonSlurper().parseText(responseBody)
+def docs = body.data?.docs ?: []
+if (docs.isEmpty()) {
+  throw new IllegalStateException('No schedules returned for ' + vars.get('targetDate') + '. body=' + responseBody)
+}
+def schedule = docs[0]
+def scheduleDay = (schedule.daysOfWeek ?: [schedule.dayOfWeek]).find { it }
+if (!scheduleDay) {
+  throw new IllegalStateException('Selected schedule did not expose dayOfWeek or daysOfWeek. body=' + responseBody)
+}
+vars.put('classScheduleId', schedule.id as String)
+vars.put('classScheduleDay', scheduleDay as String)</stringProp>
+            </JSR223PostProcessor>
+            <hashTree />
+          </hashTree>
+        </hashTree>
+        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Webhook Think Time" enabled="true">
+          <stringProp name="ConstantTimer.delay">${__P(webhookThinkTimeMs,500)}</stringProp>
+        </ConstantTimer>
+        <hashTree />
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Build Booking Payload" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import groovy.json.JsonOutput
+import java.time.LocalDate
+
+def dayMap = [SUN:0, MON:1, TUE:2, WED:3, THU:4, FRI:5, SAT:6]
+def scheduleDay = vars.get('classScheduleDay')
+if (!scheduleDay || !dayMap.containsKey(scheduleDay)) {
+  throw new IllegalStateException('Missing classScheduleDay for webhook booking payload: ' + scheduleDay)
+}
+
+def sequence = (vars.get('webhookBookingSequence') ?: '0') as int
+sequence++
+vars.put('webhookBookingSequence', String.valueOf(sequence))
+vars.remove('bookingId')
+vars.remove('providerSessionId')
+
+def baseDate = LocalDate.parse(vars.get('targetDate'))
+def baseDay = baseDate.getDayOfWeek().getValue() % 7
+def dayDelta = (dayMap[scheduleDay] - baseDay + 7) % 7
+def weekOffset = (sequence - 1) + (ctx.getThreadNum() * 1000)
+def startDate = baseDate.plusDays(dayDelta + (weekOffset * 7L))
+def endDate = startDate.plusDays(1)
+vars.put('bookingPayload', JsonOutput.toJson([
+  userId: vars.get('memberUserId'),
+  classScheduleId: [vars.get('classScheduleId')],
+  bookingStartDate: startDate.toString(),
+  bookingEndDate: endDate.toString(),
+]))</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Class Booking Create" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${bookingPayload}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-booking/create</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Admin Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${adminAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Booking Id" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import groovy.json.JsonSlurper
+def responseBody = prev.getResponseDataAsString()
+def body = new JsonSlurper().parseText(responseBody)
+def items = body.data ?: []
+if (items.isEmpty() || !items[0]?.id) {
+  throw new IllegalStateException('Booking create returned no items. HTTP ' + prev.getResponseCode() + ' body=' + responseBody)
+}
+vars.put('bookingId', items[0].id as String)</stringProp>
+          </JSR223PostProcessor>
+          <hashTree />
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Class Booking Checkout" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments" />
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/class-booking/${bookingId}/checkout</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Member Auth Header" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${memberAccessToken}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Lookup Provider Session Id" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import java.sql.DriverManager
+
+Class.forName(vars.get('jdbcDriver'))
+def conn = DriverManager.getConnection(vars.get('jdbcUrl'), vars.get('jdbcUsername'), vars.get('jdbcPassword'))
+try {
+  def sql = 'select provider_session_id from payments where target_type::text = ? and target_id = ?::uuid order by created_at desc limit 1'
+  def stmt = conn.prepareStatement(sql)
+  stmt.setString(1, 'CLASS_BOOKING')
+  stmt.setString(2, vars.get('bookingId'))
+  def rs = stmt.executeQuery()
+  if (!rs.next()) {
+    throw new IllegalStateException('No provider_session_id found for booking ' + vars.get('bookingId'))
+  }
+  vars.put('providerSessionId', rs.getString(1))
+  rs.close()
+  stmt.close()
+} finally {
+  conn.close()
+}</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="Build Stripe Webhook Event" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import groovy.json.JsonOutput
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+
+def payload = JsonOutput.toJson([
+  id: 'evt_load_' + System.currentTimeMillis() + '_' + ctx.getThreadNum(),
+  object: 'event',
+  type: 'checkout.session.completed',
+  data: [
+    object: [
+      id: vars.get('providerSessionId'),
+      payment_intent: 'pi_load_' + System.currentTimeMillis() + '_' + ctx.getThreadNum(),
+    ],
+  ],
+])
+
+def timestamp = (System.currentTimeMillis() / 1000L) as long
+def signedPayload = timestamp + '.' + payload
+def mac = Mac.getInstance('HmacSHA256')
+mac.init(new SecretKeySpec(vars.get('stripeWebhookSecret').getBytes('UTF-8'), 'HmacSHA256'))
+def digest = mac.doFinal(signedPayload.getBytes('UTF-8')).encodeHex().toString()
+
+vars.put('stripePayload', payload)
+vars.put('stripeSignature', 't=' + timestamp + ',v1=' + digest)</stringProp>
+        </JSR223Sampler>
+        <hashTree />
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST Stripe Webhook" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${stripePayload}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${apiBasePath}/payments/webhook/stripe</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Stripe Headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">stripe-signature</stringProp>
+                <stringProp name="Header.value">${stripeSignature}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree />
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

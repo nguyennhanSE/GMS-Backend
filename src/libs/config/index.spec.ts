@@ -21,11 +21,9 @@ describe('production config validation', () => {
       JWT_SECRET_ACCESS_TOKEN: 'access-secret',
       JWT_SECRET_REFRESH_TOKEN: 'refresh-secret',
       DATABASE_URL: 'postgresql://postgres:password@db.internal:5432/gms',
-      EMAIL_HOST: 'smtp.gmail.com',
-      EMAIL_PORT: '465',
-      EMAIL_SECURE: 'true',
-      EMAIL_USER: 'notifications@example.com',
-      EMAIL_PASSWORD: 'app-password',
+      RESEND_API_KEY: 're_live_example',
+      RESEND_EMAIL_TIMEOUT_MS: '12000',
+      SUPPORT_EMAIL_TO: 'support@example.com',
       EMAIL_FROM: 'GMS <notifications@example.com>',
       STRIPE_SECRET_KEY: 'sk_live_example',
       STRIPE_WEBHOOK_SECRET: 'whsec_example',
@@ -44,6 +42,9 @@ describe('production config validation', () => {
     expect(loadedConfig.RUN_BACKGROUND_WORKERS).toBe(false);
     expect(loadedConfig.STRIPE_SECRET_KEY).toBe('sk_live_example');
     expect(loadedConfig.RABBITMQ_URL).toBe('amqp://guest:guest@localhost:5672');
+    expect(loadedConfig.RESEND_API_KEY).toBe('re_live_example');
+    expect(loadedConfig.RESEND_EMAIL_TIMEOUT_MS).toBe(12000);
+    expect(loadedConfig.SUPPORT_EMAIL_TO).toBe('support@example.com');
   });
 
   it('rejects APP_RUNTIME_ROLE=all in production', () => {
@@ -54,11 +55,8 @@ describe('production config validation', () => {
       JWT_SECRET_ACCESS_TOKEN: 'access-secret',
       JWT_SECRET_REFRESH_TOKEN: 'refresh-secret',
       DATABASE_URL: 'postgresql://postgres:password@db.internal:5432/gms',
-      EMAIL_HOST: 'smtp.gmail.com',
-      EMAIL_PORT: '465',
-      EMAIL_SECURE: 'true',
-      EMAIL_USER: 'notifications@example.com',
-      EMAIL_PASSWORD: 'app-password',
+      RESEND_API_KEY: 're_live_example',
+      SUPPORT_EMAIL_TO: 'support@example.com',
       EMAIL_FROM: 'GMS <notifications@example.com>',
       STRIPE_SECRET_KEY: 'sk_live_example',
       STRIPE_WEBHOOK_SECRET: 'whsec_example',

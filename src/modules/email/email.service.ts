@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { NodemailerService } from '../../libs/integration/nodemailer/nodemailer.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SendEmailDto } from './dto/email.dto';
 import { config } from '../../libs/config';
+import { EMAIL_DELIVERY_SERVICE } from './email.interface';
+import type { EmailData, IEmailService } from './email.interface';
 
 export interface NotificationEmailRecipient {
   id: string;
@@ -24,7 +25,10 @@ export class UserEmailService {
   private readonly logger = new Logger(UserEmailService.name);
   private static readonly NOTIFICATION_EMAIL_TIMEOUT_MS = 5000;
 
-  constructor(private readonly nodemailerService: NodemailerService) { }
+  constructor(
+    @Inject(EMAIL_DELIVERY_SERVICE)
+    private readonly emailService: IEmailService,
+  ) {}
 
   async sendWelcomeEmail(user: SendEmailDto, plainPassword: string): Promise<boolean> {
     try {
@@ -34,7 +38,7 @@ export class UserEmailService {
       const html = this.getWelcomeEmailTemplate(user, plainPassword);
       const text = this.getWelcomeEmailText(user, plainPassword);
 
-      const result = await this.nodemailerService.sendEmail({
+      const result = await this.emailService.sendEmail({
         to: user.email,
         subject,
         html,
@@ -62,7 +66,7 @@ export class UserEmailService {
       const html = this.getUserUpdatedEmailTemplate(user, changes);
       const text = this.getUserUpdatedEmailText(user, changes);
 
-      const result = await this.nodemailerService.sendEmail({
+      const result = await this.emailService.sendEmail({
         to: user.email,
         subject,
         html,
@@ -90,7 +94,7 @@ export class UserEmailService {
       const html = this.getPasswordChangedEmailTemplate(user);
       const text = this.getPasswordChangedEmailText(user);
 
-      const result = await this.nodemailerService.sendEmail({
+      const result = await this.emailService.sendEmail({
         to: user.email,
         subject,
         html,
@@ -132,7 +136,7 @@ export class UserEmailService {
         options,
       );
 
-      const result = await this.nodemailerService.sendEmail({
+      const result = await this.emailService.sendEmail({
         to: user.email,
         subject,
         html,
@@ -564,10 +568,19 @@ This is an automated message from Liflow System
     try {
       this.logger.log(`Sending support feedback email to admin`, { userEmail, subject });
 
-      const adminEmail = config.EMAIL_USER;
-      const senderEmail = config.EMAIL_FROM?.trim() || adminEmail;
+      const adminEmail = config.SUPPORT_EMAIL_TO?.trim();
+      const senderEmail = config.EMAIL_FROM?.trim();
       if (!adminEmail) {
-        this.logger.error('Cannot send support feedback: EMAIL_USER not configured');
+        this.logger.error(
+          'Cannot send support feedback: SUPPORT_EMAIL_TO not configured',
+        );
+        return false;
+      }
+
+      if (!senderEmail) {
+        this.logger.error(
+          'Cannot send support feedback: EMAIL_FROM not configured',
+        );
         return false;
       }
 
@@ -575,7 +588,7 @@ This is an automated message from Liflow System
       const html = this.getSupportFeedbackEmailTemplate(userEmail, subject, message);
       const text = this.getSupportFeedbackEmailText(userEmail, subject, message);
 
-      const result = await this.nodemailerService.sendEmail({
+      const result = await this.emailService.sendEmail({
         to: adminEmail,
         from: senderEmail,
         replyTo: userEmail,
@@ -658,12 +671,7 @@ This is an automated message from Liflow Support System
     `;
   }
 
-  private async sendEmailWithTimeout(data: {
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
-  }): Promise<boolean> {
+  private async sendEmailWithTimeout(data: EmailData): Promise<boolean> {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const timeoutPromise = new Promise<boolean>((resolve) => {
@@ -679,7 +687,7 @@ This is an automated message from Liflow Support System
 
     try {
       return await Promise.race([
-        this.nodemailerService.sendEmail(data),
+        this.emailService.sendEmail(data),
         timeoutPromise,
       ]);
     } finally {

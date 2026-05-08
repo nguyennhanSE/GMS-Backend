@@ -1,13 +1,3 @@
-export interface EmailConfig {
-    host: string;
-    port: number;
-    secure: boolean;
-    auth: {
-        user: string;
-        pass: string;
-    };
-}
-
 export interface EmailTemplate {
     subject: string;
     html: string;
@@ -26,3 +16,5 @@ export interface EmailData {
 export interface IEmailService {
     sendEmail(data: EmailData): Promise<boolean>;
 }
+
+export const EMAIL_DELIVERY_SERVICE = Symbol('EMAIL_DELIVERY_SERVICE');

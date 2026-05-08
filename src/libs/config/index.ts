@@ -32,20 +32,6 @@ function readRequiredEnv(
   return '';
 }
 
-function readEmailFromEnv(env: NodeJS.ProcessEnv): string {
-  const emailFrom = env.EMAIL_FROM?.trim();
-  if (emailFrom) {
-    return emailFrom;
-  }
-
-  const emailUser = env.EMAIL_USER?.trim();
-  if (emailUser) {
-    return emailUser;
-  }
-
-  return 'noreply@gms.com';
-}
-
 function validateProductionConfig(
   nodeEnv: string,
   missingKeys: Set<string>,
@@ -60,6 +46,22 @@ function validateProductionConfig(
   throw new Error(
     `Invalid production configuration from ${envFile}. Missing required variables: ${missingList}. Copy .env.prod.example to .env.prod and provide real production values.`,
   );
+}
+
+function readPositiveIntEnv(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: number,
+): number {
+  const rawValue = env[name]?.trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsedValue = parseInt(rawValue, 10);
+  return Number.isFinite(parsedValue) && parsedValue > 0
+    ? parsedValue
+    : fallback;
 }
 
 export function buildConfig(
@@ -120,24 +122,25 @@ export function buildConfig(
         ),
 
     // Email Configuration
-    EMAIL_HOST: isProduction
-      ? readRequiredEnv(env, 'EMAIL_HOST', missingProductionKeys)
-      : readEnv(env, 'EMAIL_HOST', 'smtp.naver.com'),
-    EMAIL_PORT: isProduction
-      ? readRequiredEnv(env, 'EMAIL_PORT', missingProductionKeys)
-      : env.EMAIL_PORT ?? 465,
-    EMAIL_SECURE: isProduction
-      ? readRequiredEnv(env, 'EMAIL_SECURE', missingProductionKeys)
-      : env.EMAIL_SECURE ?? true,
-    EMAIL_USER: isProduction
-      ? readRequiredEnv(env, 'EMAIL_USER', missingProductionKeys)
-      : env.EMAIL_USER ?? '',
-    EMAIL_PASSWORD: isProduction
-      ? readRequiredEnv(env, 'EMAIL_PASSWORD', missingProductionKeys)
-      : env.EMAIL_PASSWORD ?? '',
+    RESEND_API_KEY: isProduction
+      ? readRequiredEnv(env, 'RESEND_API_KEY', missingProductionKeys)
+      : env.RESEND_API_KEY ?? '',
+    RESEND_API_URL: readEnv(
+      env,
+      'RESEND_API_URL',
+      'https://api.resend.com/emails',
+    ),
+    RESEND_EMAIL_TIMEOUT_MS: readPositiveIntEnv(
+      env,
+      'RESEND_EMAIL_TIMEOUT_MS',
+      10_000,
+    ),
+    SUPPORT_EMAIL_TO: isProduction
+      ? readRequiredEnv(env, 'SUPPORT_EMAIL_TO', missingProductionKeys)
+      : env.SUPPORT_EMAIL_TO ?? '',
     EMAIL_FROM: isProduction
       ? readRequiredEnv(env, 'EMAIL_FROM', missingProductionKeys)
-      : readEmailFromEnv(env),
+      : env.EMAIL_FROM?.trim() ?? '',
 
     // Cloudinary Configuration
     CLOUDINARY_CLOUD_NAME: env.CLOUDINARY_CLOUD_NAME ?? '',

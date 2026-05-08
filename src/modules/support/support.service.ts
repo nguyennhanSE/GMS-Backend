@@ -21,7 +21,7 @@ export class SupportService {
       },
     });
 
-    // Fire-and-forget: don't block the response for SMTP
+    // Fire-and-forget: don't block the response on external email delivery.
     this.emailService
       .sendSupportFeedbackEmail(userEmail, dto.subject, dto.message)
       .catch((err) => this.logger.error('Failed to send feedback email', err));

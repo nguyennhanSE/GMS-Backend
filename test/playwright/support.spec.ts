@@ -11,27 +11,29 @@ import {
   type SeededUsers,
   type TemporaryApiServer,
 } from './api-helpers';
-import { SmtpTestServer, type SmtpTestServerOptions } from './smtp-test-server';
+import {
+  ResendTestServer,
+  type ResendTestServerOptions,
+} from './resend-test-server';
 import { isDeployedTarget } from './target-mode';
 
 const prisma = new PrismaService();
 const SUPPORT_ADMIN_EMAIL = 'support-admin@test.local';
-const SUPPORT_FROM_EMAIL = 'support-bot@test.local';
-const SMTP_PASSWORD = 'smtp-password';
+const SUPPORT_FROM_EMAIL = 'GMS <support-bot@test.local>';
 
 type SupportHarness = {
   server: TemporaryApiServer;
   anonymousApi: APIRequestContext;
   memberApi: APIRequestContext;
   adminApi: APIRequestContext;
-  smtpServer?: SmtpTestServer;
+  resendServer?: ResendTestServer;
   stop: () => Promise<void>;
 };
 
 test.describe('Support Playwright API E2E', () => {
   test.skip(
     isDeployedTarget(),
-    'Support Playwright tests require a temporary local SMTP server and per-process email env overrides.',
+    'Support Playwright tests require a temporary local Resend-compatible server and per-process email env overrides.',
   );
 
   let seededUsers: SeededUsers;
@@ -47,7 +49,7 @@ test.describe('Support Playwright API E2E', () => {
 
   test.afterEach(async () => {
     await cleanupFeedbacks();
-    defaultHarness.smtpServer?.clearMessages();
+    defaultHarness.resendServer?.clearMessages();
   });
 
   test.afterAll(async () => {
@@ -91,20 +93,22 @@ test.describe('Support Playwright API E2E', () => {
     expect(savedFeedback?.subject).toBe(subject);
     expect(savedFeedback?.message).toBe(message);
 
-    const deliveredEmail = await defaultHarness.smtpServer?.waitForMessage();
+    const deliveredEmail = await defaultHarness.resendServer?.waitForMessage();
     expect(deliveredEmail).toBeDefined();
-    expect(deliveredEmail?.headers.to).toContain(SUPPORT_ADMIN_EMAIL);
-    expect(deliveredEmail?.headers.from).toContain(SUPPORT_FROM_EMAIL);
-    expect(deliveredEmail?.headers['reply-to']).toContain(
+    expect(deliveredEmail?.headers.authorization).toBe('Bearer re_test_key');
+    expect(deliveredEmail?.body).toEqual(
+      expect.objectContaining({
+        to: SUPPORT_ADMIN_EMAIL,
+        from: SUPPORT_FROM_EMAIL,
+        reply_to: seededUsers.member.email,
+        subject: `[Support Feedback] ${subject}`,
+      }),
+    );
+    expect(String(deliveredEmail?.body.html)).toContain('New Support Feedback');
+    expect(String(deliveredEmail?.body.html)).toContain(
       seededUsers.member.email,
     );
-    expect(deliveredEmail?.headers.subject).toContain(
-      `[Support Feedback] ${subject}`,
-    );
-    const normalizedEmail = normalizeQuotedPrintable(deliveredEmail?.raw ?? '');
-    expect(normalizedEmail).toContain('New Support Feedback');
-    expect(normalizedEmail).toContain(seededUsers.member.email);
-    expect(normalizedEmail).toContain(message);
+    expect(String(deliveredEmail?.body.html)).toContain(message);
   });
 
   test('allows admins to submit feedback and routes reply-to to the authenticated admin', async () => {
@@ -117,8 +121,8 @@ test.describe('Support Playwright API E2E', () => {
 
     expect(response.status()).toBe(201);
 
-    const email = await defaultHarness.smtpServer?.waitForMessage();
-    expect(email?.headers['reply-to']).toContain(seededUsers.admin.email);
+    const email = await defaultHarness.resendServer?.waitForMessage();
+    expect(email?.body.reply_to).toBe(seededUsers.admin.email);
 
     const feedbackCount = await prisma.feedback.count({
       where: { userId: seededUsers.admin.id },
@@ -126,26 +130,24 @@ test.describe('Support Playwright API E2E', () => {
     expect(feedbackCount).toBe(1);
   });
 
-  test('falls back to EMAIL_USER as the sender when EMAIL_FROM is blank', async () => {
+  test('persists feedback and skips support email when SUPPORT_EMAIL_TO is blank', async () => {
     const harness = await startSupportHarness({
       envOverrides: {
-        EMAIL_FROM: '',
+        SUPPORT_EMAIL_TO: '',
       },
     });
 
     try {
       const response = await harness.memberApi.post('support/feedback', {
         data: {
-          subject: 'Blank sender fallback',
-          message: 'The from header should fall back to the configured admin account.',
+          subject: 'Missing support recipient',
+          message: 'The feedback should be saved without routing email to EMAIL_FROM.',
         },
       });
 
       expect(response.status()).toBe(201);
-
-      const email = await harness.smtpServer?.waitForMessage();
-      expect(email?.headers.from).toContain(SUPPORT_ADMIN_EMAIL);
-      expect(email?.headers['reply-to']).toContain(seededUsers.member.email);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(harness.resendServer?.getMessages()).toHaveLength(0);
     } finally {
       await harness.stop();
     }
@@ -232,14 +234,13 @@ test.describe('Support Playwright API E2E', () => {
     expect(response.status()).toBe(400);
   });
 
-  test('persists feedback even when SMTP connections are refused', async () => {
+  test('persists feedback even when the Resend API is unavailable', async () => {
     const unusedPort = await reserveUnusedPort();
     const harness = await startSupportHarness({
-      skipSmtpServer: true,
+      skipResendServer: true,
       envOverrides: {
-        EMAIL_HOST: '127.0.0.1',
-        EMAIL_PORT: `${unusedPort}`,
-        EMAIL_SECURE: 'false',
+        RESEND_API_URL: `http://127.0.0.1:${unusedPort}/emails`,
+        RESEND_EMAIL_TIMEOUT_MS: '250',
       },
     });
 
@@ -247,8 +248,8 @@ test.describe('Support Playwright API E2E', () => {
       const startedAt = Date.now();
       const response = await harness.memberApi.post('support/feedback', {
         data: {
-          subject: 'SMTP refused',
-          message: 'Saving feedback should not depend on the SMTP server being online.',
+          subject: 'Resend unavailable',
+          message: 'Saving feedback should not depend on the email API being online.',
         },
       });
       const durationMs = Date.now() - startedAt;
@@ -263,16 +264,16 @@ test.describe('Support Playwright API E2E', () => {
         where: { id: body.data.id },
       });
       expect(savedFeedback).not.toBeNull();
-      expect(savedFeedback?.subject).toBe('SMTP refused');
+      expect(savedFeedback?.subject).toBe('Resend unavailable');
     } finally {
       await harness.stop();
     }
   });
 
-  test('returns immediately even when the SMTP server responds slowly after DATA', async () => {
+  test('returns immediately even when the Resend API responds slowly', async () => {
     const harness = await startSupportHarness({
-      smtpOptions: {
-        afterDataDelayMs: 3_000,
+      resendOptions: {
+        responseDelayMs: 3_000,
       },
     });
 
@@ -280,7 +281,7 @@ test.describe('Support Playwright API E2E', () => {
       const startedAt = Date.now();
       const response = await harness.memberApi.post('support/feedback', {
         data: {
-          subject: 'Slow SMTP',
+          subject: 'Slow Resend',
           message: 'The HTTP response should not wait for the outbound email to finish.',
         },
       });
@@ -288,7 +289,7 @@ test.describe('Support Playwright API E2E', () => {
 
       expect(response.status()).toBe(201);
       expect(durationMs).toBeLessThan(1_500);
-      await harness.smtpServer?.waitForMessage();
+      await harness.resendServer?.waitForMessage();
       await new Promise((resolve) => setTimeout(resolve, 3_200));
     } finally {
       await harness.stop();
@@ -308,24 +309,23 @@ test.describe('Support Playwright API E2E', () => {
 
 async function startSupportHarness(options: {
   envOverrides?: Record<string, string>;
-  smtpOptions?: SmtpTestServerOptions;
-  skipSmtpServer?: boolean;
+  resendOptions?: ResendTestServerOptions;
+  skipResendServer?: boolean;
 } = {}): Promise<SupportHarness> {
-  let smtpServer: SmtpTestServer | undefined;
+  let resendServer: ResendTestServer | undefined;
   const envOverrides = {
-    EMAIL_HOST: '127.0.0.1',
-    EMAIL_PORT: '',
-    EMAIL_SECURE: 'false',
-    EMAIL_USER: SUPPORT_ADMIN_EMAIL,
-    EMAIL_PASSWORD: SMTP_PASSWORD,
+    RESEND_API_KEY: 're_test_key',
+    RESEND_API_URL: '',
+    RESEND_EMAIL_TIMEOUT_MS: '1000',
     EMAIL_FROM: SUPPORT_FROM_EMAIL,
+    SUPPORT_EMAIL_TO: SUPPORT_ADMIN_EMAIL,
     ...options.envOverrides,
   };
 
-  if (!options.skipSmtpServer) {
-    smtpServer = new SmtpTestServer(options.smtpOptions);
-    await smtpServer.start();
-    envOverrides.EMAIL_PORT = `${smtpServer.port}`;
+  if (!options.skipResendServer) {
+    resendServer = new ResendTestServer(options.resendOptions);
+    await resendServer.start();
+    envOverrides.RESEND_API_URL = resendServer.url;
   }
 
   const server = await startTemporaryApiServer(envOverrides);
@@ -348,7 +348,7 @@ async function startSupportHarness(options: {
     anonymousApi,
     memberApi,
     adminApi,
-    smtpServer,
+    resendServer,
     stop: async () => {
       await Promise.all([
         anonymousApi.dispose(),
@@ -356,7 +356,7 @@ async function startSupportHarness(options: {
         adminApi.dispose(),
       ]);
       await server.stop();
-      await smtpServer?.stop();
+      await resendServer?.stop();
     },
   };
 }
@@ -394,11 +394,4 @@ async function reserveUnusedPort() {
       });
     });
   });
-}
-
-function normalizeQuotedPrintable(value: string) {
-  return value
-    .replace(/=\r\n/g, '')
-    .replace(/=20/g, ' ')
-    .replace(/=3D/g, '=');
 }

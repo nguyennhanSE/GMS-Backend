@@ -23,6 +23,14 @@ services:
         sync: false
       - key: RABBITMQ_URL
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_EMAIL_TIMEOUT_MS
+        value: "10000"
+      - key: EMAIL_FROM
+        sync: false
+      - key: SUPPORT_EMAIL_TO
+        sync: false
 
   - type: worker
     name: gms-backend-worker
@@ -45,4 +53,12 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: RABBITMQ_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_EMAIL_TIMEOUT_MS
+        value: "10000"
+      - key: EMAIL_FROM
+        sync: false
+      - key: SUPPORT_EMAIL_TO
         sync: false

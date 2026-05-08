@@ -54,7 +54,7 @@ describe('NotificationEmailListener', () => {
 
   it('swallows email errors so the event chain does not fail', async () => {
     emailService.sendNotificationEmail.mockRejectedValue(
-      new Error('SMTP timeout'),
+      new Error('Email API timeout'),
     );
 
     await expect(listener.handleClassCancelled(payload)).resolves.toBeUndefined();

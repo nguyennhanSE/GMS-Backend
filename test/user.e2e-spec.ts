@@ -5,7 +5,7 @@ import * as supertest from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../src/modules/storage/storage.service';
-import { NodemailerService } from '../src/libs/integration/nodemailer/nodemailer.service';
+import { EMAIL_DELIVERY_SERVICE } from '../src/modules/email/email.interface';
 
 describe('User Module Integration (e2e)', () => {
   let app: INestApplication;
@@ -16,7 +16,7 @@ describe('User Module Integration (e2e)', () => {
     uploadUserAvatar: jest.fn(),
     deleteObject: jest.fn(),
   };
-  const mockNodemailerService = {
+  const mockEmailDeliveryService = {
     sendEmail: jest.fn().mockResolvedValue(true),
   };
 
@@ -44,8 +44,8 @@ describe('User Module Integration (e2e)', () => {
     })
       .overrideProvider(StorageService)
       .useValue(storageServiceMock)
-      .overrideProvider(NodemailerService)
-      .useValue(mockNodemailerService)
+      .overrideProvider(EMAIL_DELIVERY_SERVICE)
+      .useValue(mockEmailDeliveryService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -120,7 +120,7 @@ describe('User Module Integration (e2e)', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
-    mockNodemailerService.sendEmail.mockResolvedValue(true);
+    mockEmailDeliveryService.sendEmail.mockResolvedValue(true);
   });
 
   async function ensureRole(name: string, description: string) {
@@ -207,7 +207,7 @@ describe('User Module Integration (e2e)', () => {
   }
 
   function extractVerificationTokenFromEmail(): string {
-    const [firstCall] = mockNodemailerService.sendEmail.mock.calls;
+    const [firstCall] = mockEmailDeliveryService.sendEmail.mock.calls;
     if (!firstCall?.[0]) {
       throw new Error('Verification email was not sent');
     }
@@ -263,7 +263,7 @@ describe('User Module Integration (e2e)', () => {
     });
 
     it('rolls back the user if verification email sending fails', async () => {
-      mockNodemailerService.sendEmail.mockResolvedValueOnce(false);
+      mockEmailDeliveryService.sendEmail.mockResolvedValueOnce(false);
 
       const response = await authPost(adminToken, '/user/create').send({
         firstName: 'Rollback',
@@ -295,8 +295,8 @@ describe('User Module Integration (e2e)', () => {
       expect(response.body.data.email).toBe(MEMBER_EMAIL);
       expect(response.body.data.password).toBeUndefined();
       expect(response.body.data.status).toBe('pending_verification');
-      expect(mockNodemailerService.sendEmail).toHaveBeenCalledTimes(1);
-      expect(mockNodemailerService.sendEmail).toHaveBeenCalledWith(
+      expect(mockEmailDeliveryService.sendEmail).toHaveBeenCalledTimes(1);
+      expect(mockEmailDeliveryService.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: MEMBER_EMAIL,
           subject: 'Verify Your Liflow Account',
@@ -381,7 +381,7 @@ describe('User Module Integration (e2e)', () => {
       expect([200, 201]).toContain(response.status);
       expect(response.body.data.email).toBe(REGISTER_EMAIL);
       expect(response.body.data.status).toBe('pending_verification');
-      expect(mockNodemailerService.sendEmail).toHaveBeenCalledTimes(1);
+      expect(mockEmailDeliveryService.sendEmail).toHaveBeenCalledTimes(1);
 
       registeredMemberUserId = response.body.data.id;
       registeredMemberVerificationToken = extractVerificationTokenFromEmail();

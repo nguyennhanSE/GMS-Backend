@@ -10,7 +10,10 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ClassBookingService } from './class-booking.service';
-import { CreateMultipleClassBookingDto } from './dto/create-class-booking.dto';
+import {
+  CreateMultipleClassBookingDto,
+  CreateMyClassBookingDto,
+} from './dto/create-class-booking.dto';
 import { UpdateClassBookingDto } from './dto/update-class-booking.dto';
 import {
   ApiTags,
@@ -34,8 +37,10 @@ export class ClassBookingController {
   constructor(private readonly classBookingService: ClassBookingService) {}
 
   @Post('create')
-  @Roles(ERoleName.ADMIN)
-  @ApiOperation({ summary: 'Create a new class booking (Admin only)' })
+  @Roles(ERoleName.ADMIN, ERoleName.STAFF)
+  @ApiOperation({
+    summary: 'Create class bookings on behalf of a member (Admin/Staff only)',
+  })
   @ApiResponse({
     status: 201,
     description: 'Class booking created successfully',
@@ -48,8 +53,38 @@ export class ClassBookingController {
   async create(@Body() createClassBookingDto: CreateMultipleClassBookingDto) {
     const responseModel = new ResponseModel();
 
-    const classBooking = await this.classBookingService.create(
+    const classBooking = await this.classBookingService.createForUser(
       createClassBookingDto,
+    );
+    const result = classBooking.map(toResponse);
+    responseModel.setData(result);
+
+    return responseModel;
+  }
+
+  @Post('my-bookings')
+  @Roles(ERoleName.MEMBER)
+  @ApiOperation({
+    summary: 'Create class bookings for the current member',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Member booking created successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad request - validation error, class full, or duplicate booking',
+  })
+  async createMyBooking(
+    @CurrentUser() user: RequestUser,
+    @Body() createMyClassBookingDto: CreateMyClassBookingDto,
+  ) {
+    const responseModel = new ResponseModel();
+
+    const classBooking = await this.classBookingService.createForCurrentUser(
+      user.sub,
+      createMyClassBookingDto,
     );
     const result = classBooking.map(toResponse);
     responseModel.setData(result);

@@ -1,18 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsArray, IsDate, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
+import { IsArray, IsDate, IsNotEmpty, IsUUID } from "class-validator";
 import { Type } from "class-transformer";
 
 
 export class CreateClassBookingBaseDto {
-    @ApiProperty({
-        description: 'User ID who is booking the class',
-        example: '123e4567-e89b-12d3-a456-426614174000',
-        format: 'uuid'
-    })
-    @IsUUID()
-    @IsNotEmpty()
-    userId!: string;
-
     @ApiProperty({
         description: 'Booking start date',
         example: '2025-01-01',
@@ -32,18 +23,20 @@ export class CreateClassBookingBaseDto {
     @IsDate()
     @IsNotEmpty()
     bookingEndDate?: Date;
-
-    @ApiPropertyOptional({
-        description: 'Booking status',
-        example: 'confirmed',
-        maxLength: 50
-    })
-    @IsOptional()
-    @IsString()
-    @MaxLength(50)
-    status?: string;
 }
-export class CreateClassBookingDto extends CreateClassBookingBaseDto {
+
+export class CreateOperationalClassBookingBaseDto extends CreateClassBookingBaseDto {
+    @ApiProperty({
+        description: 'User ID who is booking the class',
+        example: '123e4567-e89b-12d3-a456-426614174000',
+        format: 'uuid'
+    })
+    @IsUUID()
+    @IsNotEmpty()
+    userId!: string;
+}
+
+export class CreateClassBookingDto extends CreateOperationalClassBookingBaseDto {
     @ApiProperty({
         description: 'Class Schedule ID being booked',
         example: '123e4567-e89b-12d3-a456-426614174001',
@@ -54,9 +47,19 @@ export class CreateClassBookingDto extends CreateClassBookingBaseDto {
     classScheduleId!: string;
 }
 
-export class CreateMultipleClassBookingDto extends CreateClassBookingBaseDto {
+export class CreateMultipleClassBookingDto extends CreateOperationalClassBookingBaseDto {
     @ApiProperty({
         description: 'Class Schedule IDs being booked',
+        example: ['123e4567-e89b-12d3-a456-426614174001', '123e4567-e89b-12d3-a456-426614174002'],
+    })
+    @IsArray()
+    @IsNotEmpty()
+    classScheduleId!: string[];
+}
+
+export class CreateMyClassBookingDto extends CreateClassBookingBaseDto {
+    @ApiProperty({
+        description: 'Class Schedule IDs being booked for the current member',
         example: ['123e4567-e89b-12d3-a456-426614174001', '123e4567-e89b-12d3-a456-426614174002'],
     })
     @IsArray()

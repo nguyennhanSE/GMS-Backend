@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ClassBookingEntity } from './entities/class-booking.entity';
 import {
-  CreateClassBookingDto,
+  CreateMyClassBookingDto,
   CreateMultipleClassBookingDto,
 } from './dto/create-class-booking.dto';
 import { UpdateClassBookingDto } from './dto/update-class-booking.dto';
@@ -19,7 +19,6 @@ import {
   IPaginate,
   PaginateOptions,
 } from '../../libs/models/paginate/pagimate.model';
-import { ClassScheduleService } from '../class-schedule/class-schedule.service';
 import { ScheduleExceptionService } from '../class-schedule/schedule-exception.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
@@ -38,7 +37,6 @@ export class ClassBookingService {
 
   constructor(
     private readonly classBookingRepository: ClassBookingRepository,
-    private readonly classScheduleService: ClassScheduleService,
     private readonly scheduleExceptionService: ScheduleExceptionService,
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
@@ -191,6 +189,21 @@ export class ClassBookingService {
     });
   }
 
+  private validateCreateDateRange(dto: {
+    bookingStartDate?: Date;
+    bookingEndDate?: Date;
+  }): void {
+    if (
+      dto.bookingStartDate &&
+      dto.bookingEndDate &&
+      dto.bookingStartDate >= dto.bookingEndDate
+    ) {
+      throw new BadRequestException(
+        'Booking start date must be before end date',
+      );
+    }
+  }
+
   /**
    * Create a new class booking with full race condition protection
    * Updated for new schema with GymClass relation
@@ -198,20 +211,35 @@ export class ClassBookingService {
   async create(
     createClassBookingDto: CreateMultipleClassBookingDto,
   ): Promise<ClassBookingEntity[]> {
-    // Validate dates
-    if (
-      createClassBookingDto?.bookingStartDate &&
-      createClassBookingDto?.bookingEndDate &&
-      createClassBookingDto.bookingStartDate >=
-        createClassBookingDto.bookingEndDate
-    ) {
-      throw new BadRequestException(
-        'Booking start date must be before end date',
-      );
-    }
+    return this.createForUser(createClassBookingDto);
+  }
+
+  async createForUser(
+    createClassBookingDto: CreateMultipleClassBookingDto,
+  ): Promise<ClassBookingEntity[]> {
+    return this.createWithUserId(
+      createClassBookingDto.userId,
+      createClassBookingDto,
+    );
+  }
+
+  async createForCurrentUser(
+    userId: string,
+    createClassBookingDto: CreateMyClassBookingDto,
+  ): Promise<ClassBookingEntity[]> {
+    return this.createWithUserId(userId, createClassBookingDto);
+  }
+
+  private async createWithUserId(
+    userId: string,
+    createClassBookingDto: Pick<
+      CreateMultipleClassBookingDto,
+      'classScheduleId' | 'bookingStartDate' | 'bookingEndDate'
+    >,
+  ): Promise<ClassBookingEntity[]> {
+    this.validateCreateDateRange(createClassBookingDto);
 
     const wantedSchedules = [...new Set(createClassBookingDto.classScheduleId)].sort();
-    const userId = createClassBookingDto.userId;
 
     // Use Serializable isolation level to prevent race conditions.
     // Retrying P2034 conflicts prevents transient DB serialization failures

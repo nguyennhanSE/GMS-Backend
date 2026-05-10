@@ -63,7 +63,7 @@ export function toPrismaClassBookingCreateInput(
   return {
     bookingStartDate: dto.bookingStartDate || new Date(),
     bookingEndDate: dto.bookingEndDate || new Date(),
-    status: dto.status || 'pending',
+    status: 'pending',
     user: {
       connect: { id: dto.userId },
     },

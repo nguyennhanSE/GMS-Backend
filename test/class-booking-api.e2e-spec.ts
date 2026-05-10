@@ -21,6 +21,7 @@ describe('Class Booking API (e2e)', () => {
   let testData: TestData;
   let memberToken: string;
   let adminToken: string;
+  let staffToken: string;
   let trainerToken: string;
 
   beforeAll(async () => {
@@ -55,6 +56,11 @@ describe('Class Booking API (e2e)', () => {
         app,
         testData.adminUser.email,
         testData.adminPassword,
+      );
+      staffToken = await loginAs(
+        app,
+        testData.staffUser.email,
+        testData.staffPassword,
       );
       trainerToken = await loginAs(
         app,
@@ -100,6 +106,26 @@ describe('Class Booking API (e2e)', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.data).toBeDefined();
+      expect(Array.isArray(response.body.data)).toBe(true);
+    });
+
+    it('should create booking successfully (staff)', async () => {
+      if (!staffToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+      const startDate = formatDate(nextMonday);
+      const endDate = formatDate(addDays(nextMonday, 7));
+
+      const response = await authRequest(app, staffToken)
+        .post('/class-booking/create')
+        .send({
+          userId: testData.memberUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: startDate,
+          bookingEndDate: endDate,
+        });
+
+      expect(response.status).toBe(201);
       expect(Array.isArray(response.body.data)).toBe(true);
     });
 
@@ -265,6 +291,67 @@ describe('Class Booking API (e2e)', () => {
       );
 
       expect(response.status).toBe(401);
+    });
+  });
+
+  describe('POST /class-booking/my-bookings', () => {
+    it('should allow member to create their own booking', async () => {
+      if (!memberToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+      const startDate = formatDate(nextMonday);
+      const endDate = formatDate(addDays(nextMonday, 7));
+
+      const response = await authRequest(app, memberToken)
+        .post('/class-booking/my-bookings')
+        .send({
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: startDate,
+          bookingEndDate: endDate,
+        });
+
+      expect(response.status).toBe(201);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data[0].userId).toBe(testData.memberUser.id);
+      expect(response.body.data[0].status).toBe('pending');
+    });
+
+    it('should reject userId in member self-booking payload', async () => {
+      if (!memberToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+      const startDate = formatDate(nextMonday);
+      const endDate = formatDate(addDays(nextMonday, 7));
+
+      const response = await authRequest(app, memberToken)
+        .post('/class-booking/my-bookings')
+        .send({
+          userId: testData.adminUser.id,
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: startDate,
+          bookingEndDate: endDate,
+        });
+
+      expect(response.status).toBe(400);
+      expect(getErrorMessage(response.body)).toContain('userId');
+    });
+
+    it('should reject admin access to member self-booking endpoint', async () => {
+      if (!adminToken) return;
+
+      const nextMonday = getNextDayOfWeek('MON');
+      const startDate = formatDate(nextMonday);
+      const endDate = formatDate(addDays(nextMonday, 7));
+
+      const response = await authRequest(app, adminToken)
+        .post('/class-booking/my-bookings')
+        .send({
+          classScheduleId: [testData.testSchedule.id],
+          bookingStartDate: startDate,
+          bookingEndDate: endDate,
+        });
+
+      expect(response.status).toBe(403);
     });
   });
 

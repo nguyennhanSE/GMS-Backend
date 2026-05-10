@@ -44,56 +44,73 @@ export class ClassScheduleService {
    * Create a new class schedule with conflict detection
    * Prevents trainers from having overlapping schedules
    */
-  async create(
+  private resolveCreateDays(
     createClassScheduleDto: CreateClassScheduleDto,
-  ): Promise<ClassScheduleEntity> {
-    // Get day of week from daysOfWeek array (new multi-day format) or fallback to dayOfWeek (legacy)
-    const dayOfWeek = (createClassScheduleDto.daysOfWeek?.[0] ??
-      createClassScheduleDto.dayOfWeek) as DayOfWeek;
+  ): DayOfWeek[] {
+    const requestedDays = createClassScheduleDto.daysOfWeek?.length
+      ? createClassScheduleDto.daysOfWeek
+      : createClassScheduleDto.dayOfWeek
+        ? [createClassScheduleDto.dayOfWeek]
+        : [];
 
-    // Layer 1: Check if trainer is within working hours
-    const workingHoursCheck = await this.trainerService.isWithinWorkingHours(
-      createClassScheduleDto.trainerId,
-      dayOfWeek,
-      createClassScheduleDto.startTime,
-      createClassScheduleDto.endTime,
-    );
-
-    if (!workingHoursCheck.withinHours) {
+    const uniqueDays = [...new Set(requestedDays)] as DayOfWeek[];
+    if (uniqueDays.length === 0) {
       throw new BadRequestException(
-        `Cannot create schedule: ${workingHoursCheck.reason}`,
+        'At least one schedule day must be provided',
       );
     }
 
-    // Layer 2: Check for trainer schedule conflicts
-    const hasConflict =
-      await this.classScheduleRepository.checkScheduleConflict(
+    return uniqueDays;
+  }
+
+  async create(
+    createClassScheduleDto: CreateClassScheduleDto,
+  ): Promise<ClassScheduleEntity> {
+    const daysOfWeek = this.resolveCreateDays(createClassScheduleDto);
+
+    for (const dayOfWeek of daysOfWeek) {
+      const workingHoursCheck = await this.trainerService.isWithinWorkingHours(
         createClassScheduleDto.trainerId,
         dayOfWeek,
         createClassScheduleDto.startTime,
         createClassScheduleDto.endTime,
       );
 
-    if (hasConflict) {
-      const conflictingSchedules =
-        await this.classScheduleRepository.getConflictingSchedules(
+      if (!workingHoursCheck.withinHours) {
+        throw new BadRequestException(
+          `Cannot create schedule: ${workingHoursCheck.reason}`,
+        );
+      }
+
+      const hasConflict =
+        await this.classScheduleRepository.checkScheduleConflict(
           createClassScheduleDto.trainerId,
           dayOfWeek,
           createClassScheduleDto.startTime,
           createClassScheduleDto.endTime,
         );
 
-      const conflictInfo = conflictingSchedules
-        .map(
-          (s) =>
-            `"${s.gymClass?.className}" (${s.startTime?.toISOString().slice(11, 16)}-${s.endTime?.toISOString().slice(11, 16)})`,
-        )
-        .join(', ');
+      if (hasConflict) {
+        const conflictingSchedules =
+          await this.classScheduleRepository.getConflictingSchedules(
+            createClassScheduleDto.trainerId,
+            dayOfWeek,
+            createClassScheduleDto.startTime,
+            createClassScheduleDto.endTime,
+          );
 
-      throw new BadRequestException(
-        `Trainer already has a class scheduled at this time on ${dayOfWeek}. ` +
-          `Conflicting schedule(s): ${conflictInfo}`,
-      );
+        const conflictInfo = conflictingSchedules
+          .map(
+            (s) =>
+              `"${s.gymClass?.className}" (${s.startTime?.toISOString().slice(11, 16)}-${s.endTime?.toISOString().slice(11, 16)})`,
+          )
+          .join(', ');
+
+        throw new BadRequestException(
+          `Trainer already has a class scheduled at this time on ${dayOfWeek}. ` +
+            `Conflicting schedule(s): ${conflictInfo}`,
+        );
+      }
     }
 
     const created = await this.classScheduleRepository.create(createClassScheduleDto);

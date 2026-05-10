@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClassBookingService } from './class-booking.service';
 import { ClassBookingRepository } from './repositories/class-booking.repository';
-import { ClassScheduleService } from '../class-schedule/class-schedule.service';
 import { ScheduleExceptionService } from '../class-schedule/schedule-exception.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
@@ -95,10 +94,6 @@ describe('ClassBookingService', () => {
       delete: deleteBooking,
     };
 
-    const mockClassScheduleService = {
-      findOne: jest.fn(),
-    };
-
     const mockScheduleExceptionService = {
       getExceptionForDate: jest.fn().mockResolvedValue(null),
       isClassCancelledOnDate: jest.fn().mockResolvedValue(false),
@@ -113,7 +108,6 @@ describe('ClassBookingService', () => {
         ClassBookingService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ClassBookingRepository, useValue: mockRepository },
-        { provide: ClassScheduleService, useValue: mockClassScheduleService },
         {
           provide: ScheduleExceptionService,
           useValue: mockScheduleExceptionService,

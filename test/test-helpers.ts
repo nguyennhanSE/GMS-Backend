@@ -9,11 +9,13 @@ import { PrismaService } from '../prisma/prisma.service';
 export interface TestData {
   memberUser: { id: string; email: string };
   adminUser: { id: string; email: string };
+  staffUser: { id: string; email: string };
   trainerUser: { id: string; email: string };
   testClass: { id: string; className: string };
   testSchedule: { id: string };
   memberPassword: string;
   adminPassword: string;
+  staffPassword: string;
   trainerPassword: string;
 }
 
@@ -99,6 +101,7 @@ export async function createTestData(prisma: PrismaService): Promise<TestData> {
   // Get or create roles (UPPERCASE to match ERoleName enum)
   let memberRole = await prisma.role.findFirst({ where: { name: 'MEMBER' } });
   let adminRole = await prisma.role.findFirst({ where: { name: 'ADMIN' } });
+  let staffRole = await prisma.role.findFirst({ where: { name: 'STAFF' } });
   let trainerRole = await prisma.role.findFirst({ where: { name: 'TRAINER' } });
 
   if (!memberRole) {
@@ -111,6 +114,11 @@ export async function createTestData(prisma: PrismaService): Promise<TestData> {
       data: { name: 'ADMIN', description: 'Admin role' },
     });
   }
+  if (!staffRole) {
+    staffRole = await prisma.role.create({
+      data: { name: 'STAFF', description: 'Staff role' },
+    });
+  }
   if (!trainerRole) {
     trainerRole = await prisma.role.create({
       data: { name: 'TRAINER', description: 'Trainer role' },
@@ -121,6 +129,7 @@ export async function createTestData(prisma: PrismaService): Promise<TestData> {
   const testEmails = [
     'api-test-member@test.local',
     'api-test-admin@test.local',
+    'api-test-staff@test.local',
     'api-test-trainer@test.local',
   ];
 
@@ -163,6 +172,20 @@ export async function createTestData(prisma: PrismaService): Promise<TestData> {
       status: 'active',
       userRole: {
         create: { roleId: adminRole.id },
+      },
+    },
+  });
+
+  // Create test staff
+  const staffUser = await prisma.user.create({
+    data: {
+      firstName: 'API Test',
+      lastName: 'Staff',
+      email: 'api-test-staff@test.local',
+      password: hashedPassword,
+      status: 'active',
+      userRole: {
+        create: { roleId: staffRole.id },
       },
     },
   });
@@ -234,11 +257,13 @@ export async function createTestData(prisma: PrismaService): Promise<TestData> {
   return {
     memberUser: { id: memberUser.id, email: memberUser.email },
     adminUser: { id: adminUser.id, email: adminUser.email },
+    staffUser: { id: staffUser.id, email: staffUser.email },
     trainerUser: { id: trainerUser.id, email: trainerUser.email },
     testClass: { id: testClass.id, className: testClass.className },
     testSchedule: { id: testSchedule.id },
     memberPassword: testPassword,
     adminPassword: testPassword,
+    staffPassword: testPassword,
     trainerPassword: testPassword,
   };
 }
@@ -250,6 +275,7 @@ export async function cleanupTestData(prisma: PrismaService): Promise<void> {
   const testEmails = [
     'api-test-member@test.local',
     'api-test-admin@test.local',
+    'api-test-staff@test.local',
     'api-test-trainer@test.local',
   ];
 

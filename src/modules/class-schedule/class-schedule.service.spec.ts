@@ -227,6 +227,75 @@ describe('ClassScheduleService', () => {
         mockCreateDto.endTime,
       );
     });
+
+    it('should validate working hours for every requested schedule day', async () => {
+      repository.checkScheduleConflict.mockResolvedValue(false);
+      isWithinWorkingHours
+        .mockResolvedValueOnce({ withinHours: true })
+        .mockResolvedValueOnce({
+          withinHours: false,
+          reason: 'Trainer is not working on TUE at that time',
+        });
+
+      await expect(
+        service.create({
+          ...mockCreateDto,
+          daysOfWeek: [DayOfWeekDto.MON, DayOfWeekDto.TUE],
+        }),
+      ).rejects.toThrow(/Trainer is not working on TUE at that time/);
+
+      expect(isWithinWorkingHours).toHaveBeenNthCalledWith(
+        1,
+        'trainer-1',
+        DayOfWeekDto.MON,
+        mockCreateDto.startTime,
+        mockCreateDto.endTime,
+      );
+      expect(isWithinWorkingHours).toHaveBeenNthCalledWith(
+        2,
+        'trainer-1',
+        DayOfWeekDto.TUE,
+        mockCreateDto.startTime,
+        mockCreateDto.endTime,
+      );
+      expect(createSchedule).not.toHaveBeenCalled();
+    });
+
+    it('should validate schedule conflicts for every requested schedule day', async () => {
+      repository.checkScheduleConflict
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+      repository.getConflictingSchedules.mockResolvedValue([
+        {
+          ...mockSchedule,
+          id: 'schedule-2',
+          gymClass: { className: 'HIIT Training' },
+        } as any,
+      ]);
+
+      await expect(
+        service.create({
+          ...mockCreateDto,
+          daysOfWeek: [DayOfWeekDto.MON, DayOfWeekDto.TUE],
+        }),
+      ).rejects.toThrow(/on TUE/);
+
+      expect(checkScheduleConflict).toHaveBeenNthCalledWith(
+        1,
+        'trainer-1',
+        DayOfWeekDto.MON,
+        mockCreateDto.startTime,
+        mockCreateDto.endTime,
+      );
+      expect(checkScheduleConflict).toHaveBeenNthCalledWith(
+        2,
+        'trainer-1',
+        DayOfWeekDto.TUE,
+        mockCreateDto.startTime,
+        mockCreateDto.endTime,
+      );
+      expect(createSchedule).not.toHaveBeenCalled();
+    });
   });
 
   describe('update - Conflict Detection', () => {

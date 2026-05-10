@@ -317,6 +317,14 @@ test.describe('Class Booking Playwright API E2E', () => {
     };
   }
 
+  function buildMyBookingPayload(bookingDate: Date) {
+    return {
+      classScheduleId: [testData.testSchedule.id],
+      bookingStartDate: formatDate(bookingDate),
+      bookingEndDate: formatDate(addDays(bookingDate, 1)),
+    };
+  }
+
   async function createBookingThroughApi(
     userId: string,
     bookingDate: Date,
@@ -324,6 +332,15 @@ test.describe('Class Booking Playwright API E2E', () => {
   ) {
     return api.post('class-booking/create', {
       data: buildBookingPayload(userId, bookingDate),
+    });
+  }
+
+  async function createMyBookingThroughApi(
+    bookingDate: Date,
+    api: APIRequestContext = memberApi,
+  ) {
+    return api.post('class-booking/my-bookings', {
+      data: buildMyBookingPayload(bookingDate),
     });
   }
 
@@ -435,7 +452,18 @@ test.describe('Class Booking Playwright API E2E', () => {
       expect(body.data[0].userId).toBe(testData.memberUser.id);
     });
 
-    test('forbids members from creating bookings', async () => {
+    test('allows staff to create a booking on behalf of a member', async () => {
+      const nextMonday = getNextDayOfWeek('MON');
+      const response = await createBookingThroughApi(
+        testData.memberUser.id,
+        nextMonday,
+        staffApi,
+      );
+
+      expect(response.status()).toBe(201);
+    });
+
+    test('forbids members from using the operational create endpoint', async () => {
       const nextMonday = getNextDayOfWeek('MON');
       const response = await createBookingThroughApi(
         testData.memberUser.id,
@@ -444,6 +472,21 @@ test.describe('Class Booking Playwright API E2E', () => {
       );
 
       expect(response.status()).toBe(403);
+    });
+
+    test('allows members to create their own bookings through the self-booking endpoint', async () => {
+      const nextMonday = getNextDayOfWeek('MON');
+      const response = await createMyBookingThroughApi(nextMonday);
+
+      expect(response.status()).toBe(201);
+
+      const body = (await response.json()) as {
+        data: Array<{ id: string; status: string; userId: string }>;
+      };
+
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].status).toBe('pending');
+      expect(body.data[0].userId).toBe(testData.memberUser.id);
     });
 
     test('rejects bookings on the wrong day of week', async () => {

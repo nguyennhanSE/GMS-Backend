@@ -7,8 +7,18 @@ import {
   Param,
   Delete,
   ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipeBuilder,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
@@ -98,5 +108,31 @@ export class MembershipsController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.membershipsService.initiateCheckout(id, user.sub);
+  }
+
+  @Post(':id/logo')
+  @Roles(ERoleName.ADMIN)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Upload or replace Membership tier logo (Admin only)' })
+  uploadMembershipLogo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .build({
+          fileIsRequired: true,
+          errorHttpStatusCode: 400,
+        }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.membershipsService.uploadMembershipLogo(id, file);
   }
 }

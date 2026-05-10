@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
@@ -26,6 +27,7 @@ export class MembershipsService {
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
     private readonly appCacheService: AppCacheService,
+    private readonly storageService: StorageService,
   ) {}
 
   async create(dto: CreateMembershipDto) {
@@ -318,5 +320,48 @@ export class MembershipsService {
     }
 
     return activeMembership;
+  }
+
+  async uploadMembershipLogo(
+    membershipId: string,
+    file: Express.Multer.File,
+  ) {
+    const membership = await this.prisma.membership.findUnique({
+      where: { id: membershipId },
+      select: { id: true, logoKey: true },
+    });
+    if (!membership) {
+      throw new NotFoundException(`Membership tier ${membershipId} not found`);
+    }
+    const oldKey = membership.logoKey;
+
+    // Upload-first: new asset on Cloudinary before touching the DB
+    const { url, key } = await this.storageService.uploadMembershipLogo({ membershipId, file });
+
+    let updated;
+    try {
+      updated = await this.prisma.membership.update({
+        where: { id: membershipId },
+        data: { logoUrl: url, logoKey: key },
+      });
+      await this.appCacheService.invalidateTags(
+        buildMembershipInvalidationTags(membershipId),
+      );
+    } catch (err) {
+      // DB failed — clean up newly uploaded asset so it doesn't orphan
+      await this.storageService.deleteObject(key).catch((e: unknown) =>
+        this.logger.warn(`Failed to clean up orphaned Cloudinary asset ${key}`, e),
+      );
+      throw err;
+    }
+
+    // DB succeeded — now safely delete the old asset (non-fatal)
+    if (oldKey) {
+      await this.storageService.deleteObject(oldKey).catch((e: unknown) =>
+        this.logger.warn(`Failed to delete old Cloudinary asset ${oldKey}`, e),
+      );
+    }
+
+    return updated;
   }
 }

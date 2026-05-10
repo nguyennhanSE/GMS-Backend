@@ -5,7 +5,9 @@ import { DayOfWeekDto } from './dto/create-class-schedule.dto';
 
 describe('ClassScheduleController', () => {
   let controller: ClassScheduleController;
-  let service: jest.Mocked<Pick<ClassScheduleService, 'findAll' | 'findOne'>>;
+  let service: jest.Mocked<
+    Pick<ClassScheduleService, 'findAll' | 'findOne' | 'findGymClasses'>
+  >;
 
   const baseSchedule = {
     id: 'schedule-1',
@@ -40,6 +42,7 @@ describe('ClassScheduleController', () => {
     service = {
       findAll: jest.fn(),
       findOne: jest.fn(),
+      findGymClasses: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -52,6 +55,29 @@ describe('ClassScheduleController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('returns the dedicated gym class list for schedule creation clients', async () => {
+    service.findGymClasses.mockResolvedValue([
+      {
+        id: 'class-1',
+        className: 'Morning Yoga',
+        description: 'Relaxing class',
+        difficultyLevel: 'Beginner',
+        category: 'Yoga',
+        isActive: true,
+      },
+    ] as any);
+
+    const result = await controller.listGymClasses();
+
+    expect(service.findGymClasses).toHaveBeenCalled();
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: 'class-1',
+        className: 'Morning Yoga',
+      }),
+    ]);
   });
 
   it('normalizes list date to UTC noon and exposes the occurrence payload', async () => {

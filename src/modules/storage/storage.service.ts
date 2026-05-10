@@ -13,6 +13,16 @@ type UploadUserAvatarParams = {
   file: Express.Multer.File;
 };
 
+type UploadGymClassImageParams = {
+  classId: string;
+  file: Express.Multer.File;
+};
+
+type UploadMembershipLogoParams = {
+  membershipId: string;
+  file: Express.Multer.File;
+};
+
 type UploadUserAvatarResult = {
   url: string;
   key: string;
@@ -45,7 +55,7 @@ export class StorageService {
 
     const contentType = this.resolveContentType(params.file.mimetype);
     const upload = await this.uploadBuffer({
-      userId: params.userId,
+      entityFolder: `users/${params.userId}/avatar`,
       file: params.file,
       contentType,
     });
@@ -53,6 +63,70 @@ export class StorageService {
     this.logger.debug(
       `[${this.context}] Uploaded user avatar to Cloudinary`,
       { userId: params.userId, key: upload.public_id },
+      this.context,
+    );
+
+    return {
+      url: upload.secure_url,
+      key: upload.public_id,
+      contentType,
+    };
+  }
+
+  async uploadGymClassImage(
+    params: UploadGymClassImageParams,
+  ): Promise<UploadUserAvatarResult> {
+    this.assertConfigured();
+    const contentType = this.resolveContentType(params.file.mimetype);
+    const upload = await this.uploadBuffer({
+      entityFolder: `gym-classes/${params.classId}/image`,
+      file: params.file,
+      contentType,
+      transformation: {
+        width: 1200,
+        height: 675,
+        crop: 'fill',
+        gravity: 'auto',
+        fetch_format: 'auto',
+        quality: 'auto',
+      },
+    });
+
+    this.logger.debug(
+      `[${this.context}] Uploaded gym class image to Cloudinary`,
+      { classId: params.classId, key: upload.public_id },
+      this.context,
+    );
+
+    return {
+      url: upload.secure_url,
+      key: upload.public_id,
+      contentType,
+    };
+  }
+
+  async uploadMembershipLogo(
+    params: UploadMembershipLogoParams,
+  ): Promise<UploadUserAvatarResult> {
+    this.assertConfigured();
+    const contentType = this.resolveContentType(params.file.mimetype);
+    const upload = await this.uploadBuffer({
+      entityFolder: `memberships/${params.membershipId}/logo`,
+      file: params.file,
+      contentType,
+      transformation: {
+        width: 400,
+        height: 400,
+        crop: 'fill',
+        gravity: 'auto',
+        fetch_format: 'auto',
+        quality: 'auto',
+      },
+    });
+
+    this.logger.debug(
+      `[${this.context}] Uploaded membership logo to Cloudinary`,
+      { membershipId: params.membershipId, key: upload.public_id },
       this.context,
     );
 
@@ -108,13 +182,14 @@ export class StorageService {
   }
 
   private async uploadBuffer(params: {
-    userId: string;
+    entityFolder: string;
     file: Express.Multer.File;
     contentType: string;
+    transformation?: Record<string, unknown>;
   }): Promise<{ public_id: string; secure_url: string }> {
     if (!params.file.buffer) {
       throw new InternalServerErrorException(
-        'Avatar upload requires an in-memory file buffer',
+        'Upload requires an in-memory file buffer',
       );
     }
 
@@ -125,10 +200,11 @@ export class StorageService {
         const stream = cloudinary.uploader.upload_stream(
           {
             resource_type: 'image',
-            folder: `users/${params.userId}/avatar`,
+            folder: params.entityFolder,
             public_id: publicId,
             overwrite: false,
             format: MIME_EXTENSION_MAP[params.contentType],
+            ...(params.transformation ? { transformation: params.transformation } : {}),
           },
           (error, uploadResult) => {
           if (error) {

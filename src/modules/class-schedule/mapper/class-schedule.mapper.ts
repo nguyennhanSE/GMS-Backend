@@ -40,6 +40,8 @@ export function toGymClassEntity(gymClass: any): GymClassEntity {
     difficultyLevel: gymClass.difficultyLevel as DifficultyLevel,
     category: gymClass.category,
     isActive: gymClass.isActive,
+    imageUrl: gymClass.imageUrl ?? null,
+    imageKey: gymClass.imageKey ?? null,
     createdAt: gymClass.createdAt,
     updatedAt: gymClass.updatedAt,
   };
@@ -130,6 +132,7 @@ export function toResponse(entity: ClassScheduleEntity) {
     description: entity.gymClass?.description,
     category: entity.gymClass?.category,
     difficultyLevel: entity.gymClass?.difficultyLevel,
+    imageUrl: entity.gymClass?.imageUrl ?? null,
     // Schedule info - support both legacy single day and new multi-day
     dayOfWeek: entity.dayOfWeek, // Legacy field
     daysOfWeek, // New multi-day field

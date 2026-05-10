@@ -5,6 +5,9 @@ import { ClassScheduleRepository } from './class-schedule.repository';
 describe('ClassScheduleRepository', () => {
   let repository: ClassScheduleRepository;
   let prisma: {
+    gymClass: {
+      findMany: jest.Mock;
+    };
     classSchedule: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
@@ -52,6 +55,9 @@ describe('ClassScheduleRepository', () => {
 
   beforeEach(() => {
     prisma = {
+      gymClass: {
+        findMany: jest.fn(),
+      },
       classSchedule: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -108,6 +114,34 @@ describe('ClassScheduleRepository', () => {
       }),
     );
     expect(result?.occurrence?.date).toEqual(targetDate);
+  });
+
+  it('returns active gym classes ordered by class name', async () => {
+    prisma.gymClass.findMany.mockResolvedValue([
+      {
+        id: 'class-2',
+        className: 'Box Fit',
+        description: 'Boxing cardio',
+        difficultyLevel: 'Intermediate',
+        category: 'Boxing',
+        isActive: true,
+        createdAt: new Date('2030-01-01T00:00:00Z'),
+        updatedAt: new Date('2030-01-01T00:00:00Z'),
+      },
+    ]);
+
+    const result = await repository.getGymClasses();
+
+    expect(prisma.gymClass.findMany).toHaveBeenCalledWith({
+      where: { isActive: true },
+      orderBy: { className: 'asc' },
+    });
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'class-2',
+        className: 'Box Fit',
+      }),
+    ]);
   });
 
   it('builds a rescheduled occurrence for date-aware list requests', async () => {

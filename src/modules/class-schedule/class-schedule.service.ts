@@ -1,8 +1,10 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { StorageService } from '../storage/storage.service';
 import { ClassScheduleEntity } from './entities/class-schedule.entity';
 import { CreateClassScheduleDto } from './dto/create-class-schedule.dto';
 import { UpdateClassScheduleDto } from './dto/update-class-schedule.dto';
@@ -17,6 +19,7 @@ import {
 import { DayOfWeek } from '@prisma/client';
 import { TrainerService } from '../trainer/trainer.service';
 import { AppCacheService } from '../../libs/cache/cache.service';
+import { GymClassEntity } from './entities/gym-class.entity';
 import {
   buildClassScheduleDayKey,
   buildClassScheduleDetailKey,
@@ -34,10 +37,13 @@ import { buildTrainerAvailabilityTag } from '../trainer/trainer.cache';
 
 @Injectable()
 export class ClassScheduleService {
+  private readonly logger = new Logger(ClassScheduleService.name);
+
   constructor(
     private readonly classScheduleRepository: ClassScheduleRepository,
     private readonly trainerService: TrainerService,
     private readonly appCacheService: AppCacheService,
+    private readonly storageService: StorageService,
   ) {}
 
   /**
@@ -123,6 +129,10 @@ export class ClassScheduleService {
     ]);
 
     return created;
+  }
+
+  async findGymClasses(): Promise<GymClassEntity[]> {
+    return this.classScheduleRepository.getGymClasses();
   }
 
   /**
@@ -350,5 +360,42 @@ export class ClassScheduleService {
       hasConflict: conflictingSchedules.length > 0,
       conflictingSchedules,
     };
+  }
+
+  async uploadClassImage(
+    classId: string,
+    file: Express.Multer.File,
+  ): Promise<GymClassEntity> {
+    const existing = await this.classScheduleRepository.getGymClassById(classId);
+    if (!existing) {
+      throw new NotFoundException(`GymClass ${classId} not found`);
+    }
+    const oldKey = existing.imageKey;
+
+    // Upload-first: new asset on Cloudinary before touching the DB
+    const { url, key } = await this.storageService.uploadGymClassImage({ classId, file });
+
+    let updated: GymClassEntity;
+    try {
+      updated = await this.classScheduleRepository.updateGymClassImage(classId, url, key);
+      await this.appCacheService.invalidateTags(
+        buildClassScheduleInvalidationTags({ scheduleId: classId }),
+      );
+    } catch (err) {
+      // DB failed — clean up newly uploaded asset so it doesn't orphan
+      await this.storageService.deleteObject(key).catch((e: unknown) =>
+        this.logger.warn(`Failed to clean up orphaned Cloudinary asset ${key}`, e),
+      );
+      throw err;
+    }
+
+    // DB succeeded — now safely delete the old asset (non-fatal)
+    if (oldKey) {
+      await this.storageService.deleteObject(oldKey).catch((e: unknown) =>
+        this.logger.warn(`Failed to delete old Cloudinary asset ${oldKey}`, e),
+      );
+    }
+
+    return updated;
   }
 }

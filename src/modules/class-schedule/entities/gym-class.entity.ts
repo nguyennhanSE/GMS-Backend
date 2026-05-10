@@ -9,6 +9,8 @@ export class GymClassEntity {
   difficultyLevel!: DifficultyLevel;
   category!: string;
   isActive!: boolean;
+  imageUrl?: string | null;
+  imageKey?: string | null;
 
   createdAt?: Date | null;
   updatedAt?: Date | null;

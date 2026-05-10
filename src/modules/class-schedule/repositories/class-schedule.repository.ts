@@ -6,7 +6,10 @@ import {
 } from '../entities/class-schedule.entity';
 import { CreateClassScheduleDto } from '../dto/create-class-schedule.dto';
 import { UpdateClassScheduleDto } from '../dto/update-class-schedule.dto';
-import { toClassScheduleEntity } from '../mapper/class-schedule.mapper';
+import {
+  toClassScheduleEntity,
+  toGymClassEntity,
+} from '../mapper/class-schedule.mapper';
 import {
   IPaginate,
   PaginateOptions,
@@ -31,6 +34,43 @@ export class ClassScheduleRepository {
     schedule: T,
   ): T & { scheduleExceptions?: ScheduleException[] } {
     return schedule as T & { scheduleExceptions?: ScheduleException[] };
+  }
+
+  /**
+   * Get all gym class templates that can be referenced by schedules
+   */
+  async getGymClasses() {
+    const gymClasses = await this.prisma.gymClass.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        className: 'asc',
+      },
+    });
+
+    return gymClasses.map(toGymClassEntity);
+  }
+
+  async getGymClassById(
+    classId: string,
+  ): Promise<{ id: string; imageUrl: string | null; imageKey: string | null } | null> {
+    return this.prisma.gymClass.findUnique({
+      where: { id: classId },
+      select: { id: true, imageUrl: true, imageKey: true },
+    });
+  }
+
+  async updateGymClassImage(
+    classId: string,
+    imageUrl: string,
+    imageKey: string,
+  ): Promise<import('../entities/gym-class.entity').GymClassEntity> {
+    const updated = await this.prisma.gymClass.update({
+      where: { id: classId },
+      data: { imageUrl, imageKey },
+    });
+    return toGymClassEntity(updated);
   }
 
   /**

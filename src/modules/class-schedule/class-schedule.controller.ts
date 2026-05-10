@@ -8,7 +8,12 @@ import {
   Delete,
   Query,
   ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipeBuilder,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { ClassScheduleService } from './class-schedule.service';
 import { CreateClassScheduleDto } from './dto/create-class-schedule.dto';
 import { UpdateClassScheduleDto } from './dto/update-class-schedule.dto';
@@ -55,6 +60,22 @@ export class ClassScheduleController {
     } catch (error) {
       throw error;
     }
+
+    return responseModel;
+  }
+
+  @Get('classes')
+  @Roles(ERoleName.ADMIN, ERoleName.STAFF, ERoleName.TRAINER, ERoleName.MEMBER)
+  @ApiOperation({ summary: 'Get available gym class templates' })
+  @ApiResponse({
+    status: 200,
+    description: 'Gym classes retrieved successfully',
+  })
+  async listGymClasses() {
+    const responseModel = new ResponseModel();
+
+    const gymClasses = await this.classScheduleService.findGymClasses();
+    responseModel.setData(gymClasses);
 
     return responseModel;
   }
@@ -241,5 +262,31 @@ export class ClassScheduleController {
     }
 
     return responseModel;
+  }
+
+  @Post('classes/:id/image')
+  @Roles(ERoleName.ADMIN)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Upload or replace GymClass cover image (Admin only)' })
+  async uploadClassImage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .build({
+          fileIsRequired: true,
+          errorHttpStatusCode: 400,
+        }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.classScheduleService.uploadClassImage(id, file);
   }
 }

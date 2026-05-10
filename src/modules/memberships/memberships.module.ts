@@ -7,13 +7,14 @@ import { MembershipExpiryNotificationCronService } from './cron-job/membership-e
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaymentModule } from '../payment/payment.module';
 import { config } from '../../libs/config';
+import { StorageModule } from '../storage/storage.module';
 
 const membershipCronProviders = config.RUN_BACKGROUND_WORKERS
   ? [MembershipRecalculationService, MembershipExpiryNotificationCronService]
   : [];
 
 @Module({
-  imports: [PaymentModule],
+  imports: [PaymentModule, StorageModule],
   controllers: [MembershipsController, MembershipPaymentConsumer],
   providers: [
     MembershipsService,

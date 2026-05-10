@@ -7,9 +7,10 @@ import { ScheduleExceptionController } from './schedule-exception.controller';
 import { ScheduleExceptionService } from './schedule-exception.service';
 import { ScheduleExceptionRepository } from './repositories/schedule-exception.repository';
 import { TrainerModule } from '../trainer/trainer.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
-  imports: [TrainerModule],
+  imports: [TrainerModule, StorageModule],
   controllers: [ClassScheduleController, ScheduleExceptionController],
   providers: [
     ClassScheduleService,

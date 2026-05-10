@@ -20,6 +20,7 @@ describe('ClassScheduleService', () => {
   let getConflictingSchedules: jest.Mock;
   let getSchedulesByDayOfWeek: jest.Mock;
   let getSchedulesByTrainerId: jest.Mock;
+  let getGymClasses: jest.Mock;
   let rememberCache: jest.Mock;
   let invalidateCacheTags: jest.Mock;
   let isWithinWorkingHours: jest.Mock;
@@ -68,6 +69,7 @@ describe('ClassScheduleService', () => {
     getConflictingSchedules = jest.fn();
     getSchedulesByDayOfWeek = jest.fn();
     getSchedulesByTrainerId = jest.fn();
+    getGymClasses = jest.fn();
     rememberCache = jest.fn((_key, loader) => loader());
     invalidateCacheTags = jest.fn();
     isWithinWorkingHours = jest
@@ -82,6 +84,7 @@ describe('ClassScheduleService', () => {
       getPaginate: jest.fn(),
       getByDayOfWeek: getSchedulesByDayOfWeek,
       getByTrainerId: getSchedulesByTrainerId,
+      getGymClasses: getGymClasses,
       checkScheduleConflict: checkScheduleConflict,
       getConflictingSchedules: getConflictingSchedules,
     };
@@ -582,6 +585,31 @@ describe('ClassScheduleService', () => {
           tags: ['class-schedule:day'],
         }),
       );
+    });
+  });
+
+  describe('findGymClasses', () => {
+    it('should return active gym class templates for schedule creation', async () => {
+      getGymClasses.mockResolvedValue([
+        {
+          id: 'class-1',
+          className: 'Morning Yoga',
+          description: 'Relaxing yoga class',
+          difficultyLevel: 'Beginner',
+          category: 'Yoga',
+          isActive: true,
+        },
+      ]);
+
+      const result = await service.findGymClasses();
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: 'class-1',
+          className: 'Morning Yoga',
+        }),
+      ]);
+      expect(getGymClasses).toHaveBeenCalled();
     });
   });
 

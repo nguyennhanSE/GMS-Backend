@@ -318,7 +318,7 @@ export class UserService {
     );
 
     const frontendUrl = config.FRONTEND_URL.replace(/\/+$/, '');
-    return `${frontendUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
+    return `${frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
   }
 
   private async createPendingVerificationUser(

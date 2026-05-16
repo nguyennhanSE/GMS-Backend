@@ -45,8 +45,7 @@ export class UserService {
   private readonly context = UserService.name;
   private static readonly EMAIL_VERIFICATION_PURPOSE =
     'user-email-verification' as const;
-  private static readonly PENDING_VERIFICATION_STATUS =
-    'pending_verification';
+  private static readonly PENDING_VERIFICATION_STATUS = 'pending_verification';
   private readonly supportedAvatarMimeTypes = new Set([
     'image/jpeg',
     'image/png',
@@ -96,7 +95,9 @@ export class UserService {
     );
   }
 
-  async registerMember(registerMemberDto: RegisterMemberDto): Promise<UserEntity> {
+  async registerMember(
+    registerMemberDto: RegisterMemberDto,
+  ): Promise<UserEntity> {
     if (registerMemberDto.password !== registerMemberDto.confirmPassword) {
       throw new BadRequestException('Password confirmation does not match');
     }
@@ -316,8 +317,8 @@ export class UserService {
       signOptions,
     );
 
-    const appHost = config.APP_HOST.replace(/\/+$/, '');
-    return `${appHost}/api/v1/user/verify-email?token=${encodeURIComponent(token)}`;
+    const frontendUrl = config.FRONTEND_URL.replace(/\/+$/, '');
+    return `${frontendUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
   }
 
   private async createPendingVerificationUser(
@@ -402,7 +403,10 @@ export class UserService {
     return randomBytes(32).toString('hex');
   }
 
-  private buildJwtSignOptions(secret: string, expiresIn: string): JwtSignOptions {
+  private buildJwtSignOptions(
+    secret: string,
+    expiresIn: string,
+  ): JwtSignOptions {
     return {
       secret,
       expiresIn: this.parseJwtExpiresIn(expiresIn),

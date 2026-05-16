@@ -83,10 +83,31 @@ export class UserController {
     return responseModel;
   }
 
+  @Get('verify-email/context')
+  @Public()
+  @ApiOperation({
+    summary: 'Get email verification context (JSON) — used by the frontend verify page',
+  })
+  @ApiQuery({
+    name: 'token',
+    required: true,
+    description: 'Signed email verification token',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns { requiresPasswordSetup: boolean }',
+  })
+  async verifyEmailContext(@Query('token') token: string) {
+    const responseModel = new ResponseModel();
+    const context = await this.userService.getVerificationContext(token);
+    responseModel.setData(context);
+    return responseModel;
+  }
+
   @Get('verify-email')
   @Public()
   @Header('Content-Type', 'text/html; charset=utf-8')
-  @ApiOperation({ summary: 'Verify a newly created user email address' })
+  @ApiOperation({ summary: 'Verify a newly created user email address (HTML fallback landing page)' })
   @ApiQuery({
     name: 'token',
     required: true,

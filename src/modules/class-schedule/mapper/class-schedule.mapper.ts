@@ -120,7 +120,8 @@ export function toResponse(entity: ClassScheduleEntity) {
         ? [entity.dayOfWeek]
         : [];
 
-  const currentBookings = entity.occurrence?.currentBookings ?? entity.bookingsCount ?? 0;
+  const currentBookings =
+    entity.occurrence?.currentBookings ?? entity.bookingsCount ?? 0;
   const remainingSlots =
     entity.occurrence?.remainingSlots ??
     Math.max(0, entity.capacity - (entity.bookingsCount ?? 0));

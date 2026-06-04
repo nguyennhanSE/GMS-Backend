@@ -325,6 +325,7 @@ export class MembershipRecalculationService {
     // Build a lookup map from the groupBy results
     const amountMap = new Map<string, number>();
     for (const row of paymentTotals) {
+      if (!row.userId) continue;
       amountMap.set(row.userId, Number(row._sum.amount ?? 0));
     }
 

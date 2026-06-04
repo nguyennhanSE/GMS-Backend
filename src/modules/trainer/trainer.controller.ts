@@ -220,7 +220,7 @@ export class TrainerController {
   // ============================================
 
   @Post(':trainerId/clients')
-  @Roles(ERoleName.ADMIN, ERoleName.STAFF)
+  @Roles(ERoleName.ADMIN, ERoleName.STAFF, ERoleName.TRAINER)
   @ApiOperation({ summary: 'Create a trainer-client link' })
   @ApiResponse({
     status: 201,
@@ -229,11 +229,13 @@ export class TrainerController {
   async createTrainerClientLink(
     @Param('trainerId', ParseUUIDPipe) trainerId: string,
     @Body() dto: CreateTrainerClientLinkDto,
+    @CurrentUser() user: RequestUser,
   ) {
     const responseModel = new ResponseModel();
     const link = await this.trainerService.createTrainerClientLink(
       trainerId,
       dto,
+      user,
     );
     responseModel.setData(link);
     return responseModel;

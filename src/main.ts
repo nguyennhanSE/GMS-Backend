@@ -23,6 +23,10 @@ function configureHttp(app: INestApplication) {
         `http://localhost:${config.APP_PORT}/api/v1`,
         'Development server',
       )
+      .addServer(
+        'https://k16fc7gv-3501.asse.devtunnels.ms/api/v1',
+        'VS Code Tunnel',
+      )
       .build();
   } else if (NODE_ENV === 'production') {
     swaggerConfig = new DocumentBuilder()
@@ -43,6 +47,7 @@ function configureHttp(app: INestApplication) {
 
   app.enableCors({
     origin: '*',
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: [
       'Content-Type',

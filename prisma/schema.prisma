@@ -204,7 +204,7 @@ model Membership {
 
 model Payment {
   id     String @id @default(uuid()) @db.Uuid
-  userId String @map("user_id") @db.Uuid
+  userId String? @map("user_id") @db.Uuid
 
   // Polymorphic target
   targetType PaymentTargetType @map("target_type")
@@ -231,7 +231,7 @@ model Payment {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
   // Relations
-  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   userMembership UserMembership?
   trainerBooking TrainerBooking?
 

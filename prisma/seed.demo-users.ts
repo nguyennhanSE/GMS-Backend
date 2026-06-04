@@ -17,6 +17,9 @@ type DemoUserDefinition = {
   gender?: string;
   dob?: Date;
   phone?: string;
+  ptSessionPrice30?: number;
+  ptSessionPrice60?: number;
+  ptSessionPrice90?: number;
   trainerAvailableDays?: string[];
   trainerAvailableTime?: Array<{
     day: string;
@@ -77,6 +80,9 @@ const demoUsers: DemoUserDefinition[] = [
     gender: 'male',
     dob: new Date('1990-05-15'),
     phone: '+1234567890',
+    ptSessionPrice30: 150000,
+    ptSessionPrice60: 250000,
+    ptSessionPrice90: 350000,
     trainerAvailableTime: [
       { day: 'Monday', startTime: '09:00', endTime: '12:00' },
       { day: 'Monday', startTime: '14:00', endTime: '18:00' },
@@ -96,6 +102,9 @@ const demoUsers: DemoUserDefinition[] = [
     gender: 'female',
     dob: new Date('1992-08-22'),
     phone: '+1234567891',
+    ptSessionPrice30: 180000,
+    ptSessionPrice60: 300000,
+    ptSessionPrice90: 420000,
     trainerAvailableTime: [
       { day: 'Tuesday', startTime: '06:00', endTime: '14:00' },
       { day: 'Thursday', startTime: '06:00', endTime: '14:00' },
@@ -112,6 +121,9 @@ const demoUsers: DemoUserDefinition[] = [
     gender: 'male',
     dob: new Date('1988-03-10'),
     phone: '+1234567892',
+    ptSessionPrice30: 170000,
+    ptSessionPrice60: 280000,
+    ptSessionPrice90: 390000,
     trainerAvailableTime: [
       { day: 'Monday', startTime: '06:00', endTime: '10:00' },
       { day: 'Wednesday', startTime: '06:00', endTime: '10:00' },
@@ -129,6 +141,9 @@ const demoUsers: DemoUserDefinition[] = [
     gender: 'female',
     dob: new Date('1995-11-30'),
     phone: '+1234567893',
+    ptSessionPrice30: 160000,
+    ptSessionPrice60: 260000,
+    ptSessionPrice90: 360000,
     trainerAvailableTime: [
       { day: 'Monday', startTime: '17:00', endTime: '21:00' },
       { day: 'Tuesday', startTime: '17:00', endTime: '21:00' },
@@ -146,6 +161,9 @@ const demoUsers: DemoUserDefinition[] = [
     gender: 'male',
     dob: new Date('1985-07-18'),
     phone: '+1234567894',
+    ptSessionPrice30: 175000,
+    ptSessionPrice60: 290000,
+    ptSessionPrice90: 400000,
     trainerAvailableTime: [
       { day: 'Tuesday', startTime: '09:00', endTime: '17:00' },
       { day: 'Thursday', startTime: '09:00', endTime: '17:00' },
@@ -161,6 +179,9 @@ const demoUsers: DemoUserDefinition[] = [
     gender: 'female',
     dob: new Date('1993-02-14'),
     phone: '+1234567895',
+    ptSessionPrice30: 165000,
+    ptSessionPrice60: 270000,
+    ptSessionPrice90: 380000,
     trainerAvailableTime: [
       { day: 'Monday', startTime: '12:00', endTime: '20:00' },
       { day: 'Wednesday', startTime: '12:00', endTime: '20:00' },
@@ -358,6 +379,9 @@ async function upsertDemoUser(prisma: PrismaClient, user: DemoUserDefinition) {
       gender: user.gender,
       dob: user.dob,
       phone: user.phone,
+      ptSessionPrice30: user.ptSessionPrice30,
+      ptSessionPrice60: user.ptSessionPrice60,
+      ptSessionPrice90: user.ptSessionPrice90,
       trainerAvailableDays: user.trainerAvailableDays,
       trainerAvailableTime: user.trainerAvailableTime,
       ...(forcePasswordUpdate ? { password: passwordHash } : {}),
@@ -372,6 +396,9 @@ async function upsertDemoUser(prisma: PrismaClient, user: DemoUserDefinition) {
       gender: user.gender,
       dob: user.dob,
       phone: user.phone,
+      ptSessionPrice30: user.ptSessionPrice30,
+      ptSessionPrice60: user.ptSessionPrice60,
+      ptSessionPrice90: user.ptSessionPrice90,
       trainerAvailableDays: user.trainerAvailableDays,
       trainerAvailableTime: user.trainerAvailableTime,
     },

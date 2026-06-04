@@ -293,7 +293,10 @@ export class ClassScheduleRepository {
     const where: Prisma.ClassScheduleWhereInput = {};
 
     if (dayOfWeek) {
-      where.dayOfWeek = dayOfWeek;
+      where.OR = [
+        { dayOfWeek },
+        { scheduleDays: { some: { dayOfWeek } } },
+      ];
     }
 
     if (trainerId) {
@@ -660,7 +663,7 @@ export class ClassScheduleRepository {
 
     const conflicts = await this.prisma.classSchedule.findMany({
       where,
-      include: { gymClass: true },
+      include: { gymClass: true, scheduleDays: true },
       orderBy: { startTime: 'asc' },
     });
 

@@ -2,7 +2,7 @@ import { PaymentTargetType, PaymentStatus } from '@prisma/client';
 
 export interface PaymentEventPayload {
   paymentId: string;
-  userId: string;
+  userId: string | null;
   targetType: PaymentTargetType;
   targetId: string;
   status: PaymentStatus;

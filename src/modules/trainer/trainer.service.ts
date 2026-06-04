@@ -247,7 +247,19 @@ export class TrainerService {
   async createTrainerClientLink(
     trainerId: string,
     dto: CreateTrainerClientLinkDto,
+    caller: RequestUser,
   ): Promise<TrainerClientLinkView> {
+    const isTrainer =
+      caller.roles.includes(ERoleName.TRAINER) &&
+      !caller.roles.includes(ERoleName.ADMIN) &&
+      !caller.roles.includes(ERoleName.STAFF);
+
+    if (isTrainer && caller.sub !== trainerId) {
+      throw new ForbiddenException(
+        'Trainers can only create client links for themselves',
+      );
+    }
+
     await this.ensureTrainerExists(trainerId);
     await this.ensureMemberExists(dto.memberId);
 

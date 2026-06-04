@@ -36,6 +36,13 @@ export class MembershipPaymentConsumer {
     }
 
     try {
+      if (!payload.userId) {
+        this.logger.warn(
+          `[payment.success] Payment ${payload.paymentId} has no associated user — skipping membership activation`,
+        );
+        channel.ack(message);
+        return;
+      }
       await this.membershipsService.activateByPayment(
         payload.paymentId,
         payload.userId,
@@ -128,6 +135,13 @@ export class MembershipPaymentConsumer {
   private async emitPaymentFailedNotification(
     payload: PaymentEventPayload,
   ): Promise<void> {
+    if (!payload.userId) {
+      this.logger.warn(
+        `[payment.failed] Payment ${payload.paymentId} has no associated user — skipping notification`,
+      );
+      return;
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.userId },
       select: {

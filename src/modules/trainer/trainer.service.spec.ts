@@ -116,7 +116,7 @@ describe('TrainerService', () => {
     trainerRepository.findActiveTrainerClientLink.mockResolvedValue(null);
     trainerRepository.createTrainerClientLink.mockResolvedValue(activeLink);
 
-    const result = await service.createTrainerClientLink(trainerUser.sub, dto);
+    const result = await service.createTrainerClientLink(trainerUser.sub, dto, trainerUser);
 
     expect(trainerRepository.getTrainerByUserId).toHaveBeenCalledWith(
       trainerUser.sub,
@@ -146,7 +146,7 @@ describe('TrainerService', () => {
     await expect(
       service.createTrainerClientLink(trainerUser.sub, {
         memberId: memberUser.id,
-      }),
+      }, trainerUser),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 

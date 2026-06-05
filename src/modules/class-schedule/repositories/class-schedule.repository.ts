@@ -651,8 +651,13 @@ export class ClassScheduleRepository {
     // - Existing completely contains new schedule
     const where: Prisma.ClassScheduleWhereInput = {
       trainerId,
-      dayOfWeek,
       isActive: true,
+      // Match the day via the legacy column OR the scheduleDays junction table
+      // so multi-day schedules are not invisible to conflict detection
+      OR: [
+        { dayOfWeek },
+        { scheduleDays: { some: { dayOfWeek } } },
+      ],
       AND: [{ startTime: { lt: endTime } }, { endTime: { gt: startTime } }],
     };
 

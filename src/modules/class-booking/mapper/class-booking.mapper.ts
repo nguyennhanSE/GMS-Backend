@@ -75,7 +75,7 @@ export function toPrismaClassBookingCreateInput(
 
 /**
  * Maps ClassBookingEntity to response DTO
- * Now includes gymClass info from the schedule
+ * Includes gymClass info and daysOfWeek from the schedule
  */
 export function toResponse(entity: ClassBookingEntity) {
   const schedule = entity.classSchedule;
@@ -101,12 +101,14 @@ export function toResponse(entity: ClassBookingEntity) {
       ? {
           id: schedule.id,
           dayOfWeek: schedule.dayOfWeek,
+          daysOfWeek: (schedule.scheduleDays && schedule.scheduleDays.length > 0)
+            ? schedule.scheduleDays.map((sd) => sd.dayOfWeek)
+            : schedule.dayOfWeek ? [schedule.dayOfWeek] : [],
           startTime: schedule.startTime,
           endTime: schedule.endTime,
           location: schedule.location,
           capacity: schedule.capacity,
           trainerId: schedule.trainerId,
-          // Class info from gymClass relation
           className: gymClass?.className ?? null,
           description: gymClass?.description ?? null,
           category: gymClass?.category ?? null,

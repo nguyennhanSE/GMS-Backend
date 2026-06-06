@@ -7,6 +7,10 @@ import {
 export const REPORTING_SUMMARY_TTL_SECONDS = 60;
 export const REPORTING_ANALYTICS_TTL_SECONDS = 300;
 
+// Tag used to group ALL class-performance cache entries so they can be
+// invalidated together when booking data changes, regardless of date range.
+export const REPORTING_CLASS_PERFORMANCE_TAG = 'reporting:class-performance';
+
 export function buildReportingSummaryKey(): string {
   return 'gms:reporting:summary-kpis';
 }

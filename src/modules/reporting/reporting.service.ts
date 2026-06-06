@@ -12,6 +12,7 @@ import {
   buildReportingSummaryKey,
   buildRevenueAnalyticsKey,
   REPORTING_ANALYTICS_TTL_SECONDS,
+  REPORTING_CLASS_PERFORMANCE_TAG,
   REPORTING_SUMMARY_TTL_SECONDS,
 } from './reporting.cache';
 
@@ -171,6 +172,9 @@ export class ReportingService {
       },
       {
         ttlSeconds: REPORTING_ANALYTICS_TTL_SECONDS,
+        // Tag every class-performance entry so invalidateTags() can bust ALL
+        // date-range variants at once when booking data changes.
+        tags: [REPORTING_CLASS_PERFORMANCE_TAG],
       },
     );
   }

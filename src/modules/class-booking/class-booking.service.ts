@@ -26,7 +26,10 @@ import { BOOKING_STATUS } from './constants/booking-status.constants';
 import { AppCacheService } from '../../libs/cache/cache.service';
 import { buildClassScheduleInvalidationTags } from '../class-schedule/class-schedule.cache';
 import { buildTrainerAvailabilityTag } from '../trainer/trainer.cache';
-import { buildReportingSummaryKey } from '../reporting/reporting.cache';
+import {
+  buildReportingSummaryKey,
+  REPORTING_CLASS_PERFORMANCE_TAG,
+} from '../reporting/reporting.cache';
 
 const BOOKING_SERIALIZABLE_RETRY_ATTEMPTS = 3;
 const BOOKING_TRANSACTION_TIMEOUT_MS = 20000;
@@ -511,9 +514,11 @@ export class ClassBookingService {
     });
 
     await this.invalidateAvailabilityForScheduleIds(wantedSchedules);
-    // Directly delete the cached KPI key so the admin dashboard reflects
-    // the new booking immediately (the key is stored without tags).
-    await this.appCacheService.deleteMany([buildReportingSummaryKey()]);
+    // Bust reporting caches so dashboard KPIs and Top Booked Classes update immediately.
+    await Promise.all([
+      this.appCacheService.deleteMany([buildReportingSummaryKey()]),
+      this.appCacheService.invalidateTags([REPORTING_CLASS_PERFORMANCE_TAG]),
+    ]);
 
     return orderedCreatedBookings;
   }
@@ -612,7 +617,10 @@ export class ClassBookingService {
       status: 'cancelled',
     });
     await this.invalidateAvailabilityForScheduleIds([booking.classScheduleId]);
-    await this.appCacheService.deleteMany([buildReportingSummaryKey()]);
+    await Promise.all([
+      this.appCacheService.deleteMany([buildReportingSummaryKey()]),
+      this.appCacheService.invalidateTags([REPORTING_CLASS_PERFORMANCE_TAG]),
+    ]);
 
     return updated;
   }

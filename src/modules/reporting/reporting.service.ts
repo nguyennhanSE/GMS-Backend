@@ -61,7 +61,7 @@ export class ReportingService {
           revenueAggregate,
           activeMembers,
           totalTrainers,
-          todaysClassBookings,
+          todaysBookingRows,
         ] = await Promise.all([
           this.prisma.payment.aggregate({
             _sum: { amount: true },
@@ -90,25 +90,25 @@ export class ReportingService {
               },
             },
           }),
-          this.prisma.classBooking.count({
-            where: {
-              status: { in: ['pending', 'confirmed', 'attended'] },
-              // Use new Date(`${dateStr}T00:00:00.000Z`) so Prisma sends a
-              // UTC-midnight timestamp that PostgreSQL will cast to the correct
-              // DATE value regardless of the DB server's local timezone.
-              bookingStartDate: {
-                gte: new Date(`${todayDateStr}T00:00:00.000Z`),
-                lt: new Date(`${tomorrowDateStr}T00:00:00.000Z`),
-              },
-            },
-          }),
+          // Use raw SQL so the DATE column is compared against DATE literals,
+          // not timestamps — this is timezone-safe regardless of DB server timezone.
+          // Prisma sends JS Date objects as TIMESTAMPTZ; PostgreSQL then casts the
+          // stored DATE to midnight in the DB's local timezone (UTC+7 = -7h shift),
+          // which moves the row outside the UTC query window and returns count = 0.
+          this.prisma.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(*)::bigint AS count
+            FROM class_bookings
+            WHERE status IN ('pending', 'confirmed', 'attended')
+              AND booking_start_date >= ${todayDateStr}::date
+              AND booking_start_date <  ${tomorrowDateStr}::date
+          `,
         ]);
 
         return {
           totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
           activeMembers,
           totalTrainers,
-          todaysClassBookings,
+          todaysClassBookings: Number(todaysBookingRows[0]?.count ?? 0),
         };
       },
       {

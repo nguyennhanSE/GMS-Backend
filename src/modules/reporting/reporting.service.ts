@@ -49,6 +49,14 @@ export class ReportingService {
         const startOfTodayUtc = this.startOfUtcDay(now);
         const startOfTomorrowUtc = this.addUtcDays(startOfTodayUtc, 1);
 
+        // bookingStartDate is a DATE column (@db.Date) — it has no time component.
+        // Comparing a DATE column against a TIMESTAMP causes PostgreSQL to cast
+        // the DATE to midnight in the DB server's local timezone, which produces
+        // wrong results when the server runs in a non-UTC timezone (e.g. UTC+7).
+        // Fix: compare against DATE-only strings so the cast is timezone-neutral.
+        const todayDateStr = this.toDateOnly(startOfTodayUtc);
+        const tomorrowDateStr = this.toDateOnly(startOfTomorrowUtc);
+
         const [
           revenueAggregate,
           activeMembers,
@@ -85,9 +93,12 @@ export class ReportingService {
           this.prisma.classBooking.count({
             where: {
               status: { in: ['pending', 'confirmed', 'attended'] },
+              // Use new Date(`${dateStr}T00:00:00.000Z`) so Prisma sends a
+              // UTC-midnight timestamp that PostgreSQL will cast to the correct
+              // DATE value regardless of the DB server's local timezone.
               bookingStartDate: {
-                gte: startOfTodayUtc,
-                lt: startOfTomorrowUtc,
+                gte: new Date(`${todayDateStr}T00:00:00.000Z`),
+                lt: new Date(`${tomorrowDateStr}T00:00:00.000Z`),
               },
             },
           }),

@@ -156,43 +156,47 @@ describe('Reporting Module (e2e)', () => {
     const startOfTodayUtc = todayUtc();
     const startOfTomorrowUtc = addUtcDays(startOfTodayUtc, 1);
 
-    const [revenueAggregate, activeMembers, totalTrainers, todaysClassBookings] =
-      await Promise.all([
-        prisma.payment.aggregate({
-          _sum: { amount: true },
-          where: { status: PaymentStatus.SUCCESS },
-        }),
-        prisma.user.count({
-          where: {
-            status: 'active',
-            userMembership: {
-              some: {
-                status: 'normal',
-                endDate: { gte: now },
-              },
+    const [
+      revenueAggregate,
+      activeMembers,
+      totalTrainers,
+      todaysClassBookings,
+    ] = await Promise.all([
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: PaymentStatus.SUCCESS },
+      }),
+      prisma.user.count({
+        where: {
+          status: 'active',
+          userMembership: {
+            some: {
+              status: 'normal',
+              endDate: { gte: now },
             },
           },
-        }),
-        prisma.user.count({
-          where: {
-            status: 'active',
-            userRole: {
-              some: {
-                role: { name: 'TRAINER' },
-              },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          status: 'active',
+          userRole: {
+            some: {
+              role: { name: 'TRAINER' },
             },
           },
-        }),
-        prisma.classBooking.count({
-          where: {
-            status: { in: ['pending', 'confirmed', 'attended'] },
-            bookingStartDate: {
-              gte: startOfTodayUtc,
-              lt: startOfTomorrowUtc,
-            },
+        },
+      }),
+      prisma.classBooking.count({
+        where: {
+          status: { in: ['pending', 'confirmed', 'attended'] },
+          createdAt: {
+            gte: startOfTodayUtc,
+            lt: startOfTomorrowUtc,
           },
-        }),
-      ]);
+        },
+      }),
+    ]);
 
     return {
       totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
@@ -384,6 +388,7 @@ describe('Reporting Module (e2e)', () => {
           bookingStartDate: januaryBooking,
           bookingEndDate: januaryBooking,
           status: 'attended',
+          createdAt: januaryBooking,
         },
       }),
       prisma.classBooking.create({
@@ -393,6 +398,7 @@ describe('Reporting Module (e2e)', () => {
           bookingStartDate: februaryBooking,
           bookingEndDate: februaryBooking,
           status: 'pending',
+          createdAt: februaryBooking,
         },
       }),
       prisma.classBooking.create({
@@ -402,6 +408,7 @@ describe('Reporting Module (e2e)', () => {
           bookingStartDate: marchBooking,
           bookingEndDate: marchBooking,
           status: 'confirmed',
+          createdAt: marchBooking,
         },
       }),
       prisma.classBooking.create({
@@ -411,6 +418,7 @@ describe('Reporting Module (e2e)', () => {
           bookingStartDate: boxingBookingDate,
           bookingEndDate: boxingBookingDate,
           status: 'confirmed',
+          createdAt: boxingBookingDate,
         },
       }),
     ]);
@@ -631,7 +639,10 @@ describe('Reporting Module (e2e)', () => {
     });
 
     it('uses the default last-six-month monthly window when dates are omitted', async () => {
-      const response = await authGet(adminToken, '/reporting/revenue-analytics');
+      const response = await authGet(
+        adminToken,
+        '/reporting/revenue-analytics',
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data.interval).toBe('month');
@@ -668,7 +679,10 @@ describe('Reporting Module (e2e)', () => {
     });
 
     it('defaults to all-time when both dates are omitted', async () => {
-      const response = await authGet(adminToken, '/reporting/class-performance');
+      const response = await authGet(
+        adminToken,
+        '/reporting/class-performance',
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data.startDate).toBeNull();

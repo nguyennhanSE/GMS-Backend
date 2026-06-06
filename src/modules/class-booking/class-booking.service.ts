@@ -130,9 +130,7 @@ export class ClassBookingService {
     };
     const dayOfWeek = mapping[dayNumber];
     if (!dayOfWeek) {
-      throw new BadRequestException(
-        `Invalid booking day value: ${dayNumber}`,
-      );
+      throw new BadRequestException(`Invalid booking day value: ${dayNumber}`);
     }
     return dayOfWeek;
   }
@@ -175,7 +173,10 @@ export class ClassBookingService {
     tx?: Prisma.TransactionClient,
   ) {
     if (!tx?.scheduleException) {
-      return this.scheduleExceptionService.getExceptionForDate(scheduleId, date);
+      return this.scheduleExceptionService.getExceptionForDate(
+        scheduleId,
+        date,
+      );
     }
 
     return tx.scheduleException.findUnique({
@@ -241,7 +242,9 @@ export class ClassBookingService {
     // Membership check: user must have an active membership to book
     await this.requireActiveMembership(userId);
 
-    const wantedSchedules = [...new Set(createClassBookingDto.classScheduleId)].sort();
+    const wantedSchedules = [
+      ...new Set(createClassBookingDto.classScheduleId),
+    ].sort();
 
     // Use Serializable isolation level to prevent race conditions.
     // Retrying P2034 conflicts prevents transient DB serialization failures
@@ -303,18 +306,19 @@ export class ClassBookingService {
               // Uses UTC to avoid timezone issues
               // Supports both legacy dayOfWeek field and new scheduleDays relation
               // ============================================
-              const bookingDate = new Date(createClassBookingDto.bookingStartDate!);
+              const bookingDate = new Date(
+                createClassBookingDto.bookingStartDate!,
+              );
               const bookingDayOfWeek = bookingDate.getUTCDay(); // 0=Sun, 1=Mon, etc.
 
               // Get schedule days - prefer scheduleDays, fall back to legacy dayOfWeek
-              const scheduleDaysOfWeek =
-                classSchedule.scheduleDays?.length
-                  ? classSchedule.scheduleDays.map(
-                      (scheduleDay) => scheduleDay.dayOfWeek,
-                    )
-                  : classSchedule.dayOfWeek
-                    ? [classSchedule.dayOfWeek]
-                    : [];
+              const scheduleDaysOfWeek = classSchedule.scheduleDays?.length
+                ? classSchedule.scheduleDays.map(
+                    (scheduleDay) => scheduleDay.dayOfWeek,
+                  )
+                : classSchedule.dayOfWeek
+                  ? [classSchedule.dayOfWeek]
+                  : [];
 
               // Check if booking day matches any schedule day
               const bookingDayName = this.numberToDayOfWeek(bookingDayOfWeek);
@@ -341,7 +345,9 @@ export class ClassBookingService {
 
               if (exception) {
                 if (exception.type === 'CANCELLED') {
-                  const reason = exception.reason ? ` (${exception.reason})` : '';
+                  const reason = exception.reason
+                    ? ` (${exception.reason})`
+                    : '';
                   throw new BadRequestException(
                     `Class "${className}" is cancelled on ${bookingDate.toISOString().split('T')[0]}${reason}`,
                   );
@@ -376,8 +382,12 @@ export class ClassBookingService {
                   classScheduleId: scheduleId,
                   status: { notIn: ['cancelled'] },
                   // Date-aware: only check bookings that overlap with the requested date range
-                  bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
-                  bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
+                  bookingStartDate: {
+                    lte: createClassBookingDto.bookingEndDate!,
+                  },
+                  bookingEndDate: {
+                    gte: createClassBookingDto.bookingStartDate!,
+                  },
                 },
               });
 
@@ -396,8 +406,12 @@ export class ClassBookingService {
                   classScheduleId: scheduleId,
                   status: { in: ['pending', 'confirmed', 'attended'] },
                   // Date-aware: only count bookings for this specific occurrence
-                  bookingStartDate: { lte: createClassBookingDto.bookingEndDate! },
-                  bookingEndDate: { gte: createClassBookingDto.bookingStartDate! },
+                  bookingStartDate: {
+                    lte: createClassBookingDto.bookingEndDate!,
+                  },
+                  bookingEndDate: {
+                    gte: createClassBookingDto.bookingStartDate!,
+                  },
                 },
               });
 
@@ -563,6 +577,7 @@ export class ClassBookingService {
     await this.invalidateAvailabilityForScheduleIds([
       existingBooking.classScheduleId,
     ]);
+    await this.invalidateReportingSummary();
 
     return updated;
   }
@@ -612,6 +627,7 @@ export class ClassBookingService {
     // Delete class booking
     await this.classBookingRepository.delete(id);
     await this.invalidateAvailabilityForScheduleIds([existing.classScheduleId]);
+    await this.invalidateReportingSummary();
 
     return { message: `Class booking ${id} deleted successfully` };
   }
@@ -644,6 +660,7 @@ export class ClassBookingService {
     const updated = await this.classBookingRepository.update(bookingId, {
       status: BOOKING_STATUS.CONFIRMED,
     });
+    await this.invalidateReportingSummary();
 
     this.logger.log(`Booking ${bookingId} confirmed by payment`);
     return updated;
@@ -676,6 +693,7 @@ export class ClassBookingService {
       status: BOOKING_STATUS.CANCELLED,
     });
     await this.invalidateAvailabilityForScheduleIds([booking.classScheduleId]);
+    await this.invalidateReportingSummary();
 
     this.logger.log(
       `Booking ${bookingId} cancelled by payment (reason: ${reason})`,
@@ -739,6 +757,10 @@ export class ClassBookingService {
     await this.appCacheService.invalidateTags([...tags]);
   }
 
+  private async invalidateReportingSummary(): Promise<void> {
+    await this.appCacheService.deleteMany([buildReportingSummaryKey()]);
+  }
+
   private async runSerializableRetry<T>(
     operation: () => Promise<T>,
     finalMessage: string,
@@ -752,7 +774,10 @@ export class ClassBookingService {
       } catch (error) {
         lastError = error;
 
-        if (!this.isSerializableConflict(error) || attempt === maxAttempts - 1) {
+        if (
+          !this.isSerializableConflict(error) ||
+          attempt === maxAttempts - 1
+        ) {
           break;
         }
       }

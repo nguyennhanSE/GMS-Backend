@@ -49,14 +49,6 @@ export class ReportingService {
         const startOfTodayUtc = this.startOfUtcDay(now);
         const startOfTomorrowUtc = this.addUtcDays(startOfTodayUtc, 1);
 
-        // bookingStartDate is a DATE column (@db.Date) — it has no time component.
-        // Comparing a DATE column against a TIMESTAMP causes PostgreSQL to cast
-        // the DATE to midnight in the DB server's local timezone, which produces
-        // wrong results when the server runs in a non-UTC timezone (e.g. UTC+7).
-        // Fix: compare against DATE-only strings so the cast is timezone-neutral.
-        const todayDateStr = this.toDateOnly(startOfTodayUtc);
-        const tomorrowDateStr = this.toDateOnly(startOfTomorrowUtc);
-
         const [
           revenueAggregate,
           activeMembers,
@@ -90,25 +82,22 @@ export class ReportingService {
               },
             },
           }),
-          // Use raw SQL so the DATE column is compared against DATE literals,
-          // not timestamps — this is timezone-safe regardless of DB server timezone.
-          // Prisma sends JS Date objects as TIMESTAMPTZ; PostgreSQL then casts the
-          // stored DATE to midnight in the DB's local timezone (UTC+7 = -7h shift),
-          // which moves the row outside the UTC query window and returns count = 0.
-          this.prisma.$queryRaw<[{ count: bigint }]>`
-            SELECT COUNT(*)::bigint AS count
-            FROM class_bookings
-            WHERE status IN ('pending', 'confirmed', 'attended')
-              AND booking_start_date >= ${todayDateStr}::date
-              AND booking_start_date <  ${tomorrowDateStr}::date
-          `,
+          this.prisma.classBooking.count({
+            where: {
+              status: { in: ['pending', 'confirmed', 'attended'] },
+              createdAt: {
+                gte: startOfTodayUtc,
+                lt: startOfTomorrowUtc,
+              },
+            },
+          }),
         ]);
 
         return {
           totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
           activeMembers,
           totalTrainers,
-          todaysClassBookings: Number(todaysBookingRows[0]?.count ?? 0),
+          todaysClassBookings: todaysBookingRows,
         };
       },
       {
@@ -129,7 +118,8 @@ export class ReportingService {
           range.endExclusive,
         );
 
-        const rows = await this.prisma.$queryRaw<RevenueAnalyticsRow[]>(querySql);
+        const rows =
+          await this.prisma.$queryRaw<RevenueAnalyticsRow[]>(querySql);
 
         return {
           interval,
@@ -164,7 +154,9 @@ export class ReportingService {
 
         return {
           startDate: range.startDate ? this.toDateOnly(range.startDate) : null,
-          endDate: range.endInclusive ? this.toDateOnly(range.endInclusive) : null,
+          endDate: range.endInclusive
+            ? this.toDateOnly(range.endInclusive)
+            : null,
           topBookedClasses: topBookedClasses.map((row) => ({
             classId: row.class_id,
             className: row.class_name,

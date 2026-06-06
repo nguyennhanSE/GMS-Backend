@@ -14,7 +14,9 @@ describe('ClassBookingService', () => {
   let service: ClassBookingService;
   let prismaService: jest.Mocked<PrismaService>;
   let classBookingRepository: jest.Mocked<ClassBookingRepository>;
-  let appCacheService: jest.Mocked<Pick<AppCacheService, 'invalidateTags'>>;
+  let appCacheService: jest.Mocked<
+    Pick<AppCacheService, 'invalidateTags' | 'deleteMany'>
+  >;
   let updateBooking: jest.Mock;
   let getBookingsByUserId: jest.Mock;
   let getBookingsByClassScheduleId: jest.Mock;
@@ -71,6 +73,7 @@ describe('ClassBookingService', () => {
 
     appCacheService = {
       invalidateTags: invalidateCacheTags,
+      deleteMany: jest.fn(),
     };
 
     const mockPrismaService = {
@@ -133,7 +136,9 @@ describe('ClassBookingService', () => {
 
   describe('create', () => {
     it('should throw BadRequestException when user has no active membership', async () => {
-      (prismaService.userMembership.findFirst as jest.Mock).mockResolvedValue(null);
+      (prismaService.userMembership.findFirst as jest.Mock).mockResolvedValue(
+        null,
+      );
 
       await expect(
         service.create({
@@ -586,9 +591,7 @@ describe('ClassBookingService', () => {
       const result = await service.findByClassScheduleId('schedule-1');
 
       expect(result).toEqual([mockBooking]);
-      expect(getBookingsByClassScheduleId).toHaveBeenCalledWith(
-        'schedule-1',
-      );
+      expect(getBookingsByClassScheduleId).toHaveBeenCalledWith('schedule-1');
     });
   });
 

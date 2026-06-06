@@ -16,7 +16,7 @@ function createMemoryCache() {
   const store = new Map<string, CacheRecord>();
 
   return {
-    get: jest.fn((key: string) => store.get(key)?.value),
+    get: jest.fn(async (key: string) => store.get(key)?.value),
     set: jest.fn((key: string, value: unknown, ttl?: number) => {
       store.set(key, { value, ttl });
     }),
@@ -69,10 +69,7 @@ describe('ReportingController Redis cache mock API', () => {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 1250000 } }),
       },
       user: {
-        count: jest
-          .fn()
-          .mockResolvedValueOnce(42)
-          .mockResolvedValueOnce(7),
+        count: jest.fn().mockResolvedValueOnce(42).mockResolvedValueOnce(7),
       },
       classBooking: {
         count: jest.fn().mockResolvedValue(18),

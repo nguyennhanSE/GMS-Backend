@@ -390,8 +390,12 @@ test.describe('Reporting Module Playwright API E2E', () => {
         classId,
         trainerId: userIds.activeTrainer,
         dayOfWeek,
-        startTime: new Date(`1970-01-01T${String(startHour).padStart(2, '0')}:00:00.000Z`),
-        endTime: new Date(`1970-01-01T${String(startHour + 1).padStart(2, '0')}:00:00.000Z`),
+        startTime: new Date(
+          `1970-01-01T${String(startHour).padStart(2, '0')}:00:00.000Z`,
+        ),
+        endTime: new Date(
+          `1970-01-01T${String(startHour + 1).padStart(2, '0')}:00:00.000Z`,
+        ),
         capacity: 20,
         price: 50,
         location: `${suiteKey}-${dayOfWeek}`,
@@ -405,6 +409,7 @@ test.describe('Reporting Module Playwright API E2E', () => {
     classScheduleId: string,
     bookingDate: Date,
     status: string,
+    createdAt = bookingDate,
   ) {
     return prisma.classBooking.create({
       data: {
@@ -413,6 +418,7 @@ test.describe('Reporting Module Playwright API E2E', () => {
         bookingStartDate: bookingDate,
         bookingEndDate: bookingDate,
         status,
+        createdAt,
       },
     });
   }
@@ -422,43 +428,47 @@ test.describe('Reporting Module Playwright API E2E', () => {
     const startOfToday = startOfUtcDay(now);
     const startOfTomorrow = addUtcDays(startOfToday, 1);
 
-    const [revenueAggregate, activeMembers, totalTrainers, todaysClassBookings] =
-      await Promise.all([
-        prisma.payment.aggregate({
-          _sum: { amount: true },
-          where: { status: PaymentStatus.SUCCESS },
-        }),
-        prisma.user.count({
-          where: {
-            status: 'active',
-            userMembership: {
-              some: {
-                status: 'normal',
-                endDate: { gte: now },
-              },
+    const [
+      revenueAggregate,
+      activeMembers,
+      totalTrainers,
+      todaysClassBookings,
+    ] = await Promise.all([
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: PaymentStatus.SUCCESS },
+      }),
+      prisma.user.count({
+        where: {
+          status: 'active',
+          userMembership: {
+            some: {
+              status: 'normal',
+              endDate: { gte: now },
             },
           },
-        }),
-        prisma.user.count({
-          where: {
-            status: 'active',
-            userRole: {
-              some: {
-                role: { name: 'TRAINER' },
-              },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          status: 'active',
+          userRole: {
+            some: {
+              role: { name: 'TRAINER' },
             },
           },
-        }),
-        prisma.classBooking.count({
-          where: {
-            status: { in: ['pending', 'confirmed', 'attended'] },
-            bookingStartDate: {
-              gte: startOfToday,
-              lt: startOfTomorrow,
-            },
+        },
+      }),
+      prisma.classBooking.count({
+        where: {
+          status: { in: ['pending', 'confirmed', 'attended'] },
+          createdAt: {
+            gte: startOfToday,
+            lt: startOfTomorrow,
           },
-        }),
-      ]);
+        },
+      }),
+    ]);
 
     return {
       totalRevenue: Number(revenueAggregate._sum.amount ?? 0),
@@ -970,7 +980,9 @@ test.describe('Reporting Module Playwright API E2E', () => {
     ]);
     expect(body.data.topBookedClasses[0]?.bookingCount).toBe(3);
     expect(
-      body.data.topBookedClasses.some((item) => item.className === classNames.zeta),
+      body.data.topBookedClasses.some(
+        (item) => item.className === classNames.zeta,
+      ),
     ).toBe(false);
   });
 

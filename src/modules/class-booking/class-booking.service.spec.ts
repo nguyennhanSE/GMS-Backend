@@ -8,7 +8,6 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PaymentService } from '../payment/payment.service';
 import { AppCacheService } from '../../libs/cache/cache.service';
 
 describe('ClassBookingService', () => {
@@ -51,8 +50,16 @@ describe('ClassBookingService', () => {
     classScheduleId: 'schedule-1',
     bookingStartDate: new Date('2030-01-07'),
     bookingEndDate: new Date('2030-01-14'),
-    status: 'pending',
+    status: 'confirmed',
     createdAt: new Date(),
+  };
+
+  const mockActiveMembership = {
+    id: 'membership-1',
+    userId: 'user-1',
+    membershipId: 'tier-1',
+    status: 'normal',
+    endDate: new Date('2031-01-01'),
   };
 
   beforeEach(async () => {
@@ -83,6 +90,9 @@ describe('ClassBookingService', () => {
       trainerAvailability: {
         findMany: jest.fn(),
       },
+      userMembership: {
+        findFirst: jest.fn().mockResolvedValue(mockActiveMembership),
+      },
     };
 
     const mockRepository = {
@@ -99,10 +109,6 @@ describe('ClassBookingService', () => {
       isClassCancelledOnDate: jest.fn().mockResolvedValue(false),
     };
 
-    const mockPaymentService = {
-      createCheckout: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ClassBookingService,
@@ -112,7 +118,6 @@ describe('ClassBookingService', () => {
           provide: ScheduleExceptionService,
           useValue: mockScheduleExceptionService,
         },
-        { provide: PaymentService, useValue: mockPaymentService },
         { provide: AppCacheService, useValue: appCacheService },
       ],
     }).compile();
@@ -127,6 +132,19 @@ describe('ClassBookingService', () => {
   });
 
   describe('create', () => {
+    it('should throw BadRequestException when user has no active membership', async () => {
+      (prismaService.userMembership.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.create({
+          classScheduleId: ['schedule-1'],
+          userId: 'user-1',
+          bookingStartDate: new Date('2030-01-07'),
+          bookingEndDate: new Date('2030-01-14'),
+        }),
+      ).rejects.toThrow('Active membership required to book a class');
+    });
+
     it('should throw BadRequestException when schedule is not active', async () => {
       const inactiveSchedule = { ...mockSchedule, isActive: false };
 
@@ -315,7 +333,7 @@ describe('ClassBookingService', () => {
       ).rejects.toThrow(/is scheduled for MON only/);
     });
 
-    it('should pass day-of-week validation when booking date matches schedule dayOfWeek', async () => {
+    it('should create booking with confirmed status when all validations pass', async () => {
       // Schedule is MON, booking date is a Monday
       const mondaySchedule = { ...mockSchedule, dayOfWeek: 'MON' };
 
@@ -334,7 +352,7 @@ describe('ClassBookingService', () => {
               classScheduleId: 'schedule-1',
               bookingStartDate: new Date('2030-01-07'),
               bookingEndDate: new Date('2030-01-14'),
-              status: 'pending',
+              status: 'confirmed',
             }),
             findMany: jest.fn(),
           },
@@ -358,7 +376,7 @@ describe('ClassBookingService', () => {
           classScheduleId: 'schedule-1',
           bookingStartDate: new Date('2030-01-07'),
           bookingEndDate: new Date('2030-01-14'),
-          status: 'pending',
+          status: 'confirmed',
           user: null,
           classSchedule: null,
         },
@@ -376,7 +394,7 @@ describe('ClassBookingService', () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result[0].status).toBe('pending');
+      expect(result[0].status).toBe('confirmed');
       expect(prismaService.$transaction).toHaveBeenCalledWith(
         expect.any(Function),
         expect.objectContaining({
@@ -401,7 +419,7 @@ describe('ClassBookingService', () => {
         classScheduleId: 'schedule-1',
         bookingStartDate: new Date('2030-01-07'),
         bookingEndDate: new Date('2030-01-14'),
-        status: 'pending',
+        status: 'confirmed',
       };
 
       prismaService.$transaction
@@ -579,15 +597,15 @@ describe('ClassBookingService', () => {
       classBookingRepository.getById.mockResolvedValue(mockBooking as any);
       classBookingRepository.update.mockResolvedValue({
         ...mockBooking,
-        status: 'confirmed',
+        status: 'attended',
       } as any);
       (prismaService.classSchedule.findMany as jest.Mock).mockResolvedValue([
         { id: 'schedule-1', trainerId: 'trainer-1' },
       ] as any);
 
-      const result = await service.update('booking-1', { status: 'confirmed' });
+      const result = await service.update('booking-1', { status: 'attended' });
 
-      expect(result.status).toBe('confirmed');
+      expect(result.status).toBe('attended');
       expect(invalidateCacheTags).toHaveBeenCalledWith(
         expect.arrayContaining([
           'class-schedule:id:schedule-1',

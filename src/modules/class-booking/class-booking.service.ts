@@ -21,7 +21,6 @@ import {
 } from '../../libs/models/paginate/pagimate.model';
 import { ScheduleExceptionService } from '../class-schedule/schedule-exception.service';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { PaymentService } from '../payment/payment.service';
 import { DayOfWeek, Prisma } from '@prisma/client';
 import { BOOKING_STATUS } from './constants/booking-status.constants';
 import { AppCacheService } from '../../libs/cache/cache.service';
@@ -39,7 +38,6 @@ export class ClassBookingService {
     private readonly classBookingRepository: ClassBookingRepository,
     private readonly scheduleExceptionService: ScheduleExceptionService,
     private readonly prisma: PrismaService,
-    private readonly paymentService: PaymentService,
     private readonly appCacheService: AppCacheService,
   ) {}
 
@@ -238,6 +236,9 @@ export class ClassBookingService {
     >,
   ): Promise<ClassBookingEntity[]> {
     this.validateCreateDateRange(createClassBookingDto);
+
+    // Membership check: user must have an active membership to book
+    await this.requireActiveMembership(userId);
 
     const wantedSchedules = [...new Set(createClassBookingDto.classScheduleId)].sort();
 
@@ -438,7 +439,7 @@ export class ClassBookingService {
                   },
                 },
                 update: {
-                  status: 'pending',
+                  status: BOOKING_STATUS.CONFIRMED,
                   bookingEndDate: createClassBookingDto.bookingEndDate!,
                 },
                 create: {
@@ -446,7 +447,7 @@ export class ClassBookingService {
                   classScheduleId: scheduleId,
                   bookingStartDate: createClassBookingDto.bookingStartDate!,
                   bookingEndDate: createClassBookingDto.bookingEndDate!,
-                  status: 'pending',
+                  status: BOOKING_STATUS.CONFIRMED,
                 },
               });
 
@@ -678,53 +679,23 @@ export class ClassBookingService {
   }
 
   /**
-   * Initiate payment checkout for a booking.
-   * Validates ownership and status, derives price server-side.
+   * Verify the user has an active (non-expired) membership.
+   * Throws BadRequestException if no active membership is found.
    */
-  async initiateCheckout(
-    bookingId: string,
-    userId: string,
-  ): Promise<{ checkoutUrl: string }> {
-    const booking = await this.findOne(bookingId);
-
-    if (booking.userId !== userId) {
-      throw new ForbiddenException(
-        "Cannot checkout for another user's booking",
-      );
-    }
-
-    if (booking.status !== BOOKING_STATUS.PENDING) {
-      throw new BadRequestException(
-        `Booking is '${booking.status}', only pending bookings can be checked out`,
-      );
-    }
-
-    // Derive price from schedule (server-side — never trust client)
-    const schedule = await this.prisma.classSchedule.findUnique({
-      where: { id: booking.classScheduleId },
-      select: { price: true },
+  private async requireActiveMembership(userId: string): Promise<void> {
+    const active = await this.prisma.userMembership.findFirst({
+      where: {
+        userId,
+        status: 'normal',
+        endDate: { gte: new Date() },
+      },
     });
 
-    if (!schedule || schedule.price <= 0) {
+    if (!active) {
       throw new BadRequestException(
-        'This class has no price configured. Contact admin.',
+        'Active membership required to book a class. Please purchase a membership first.',
       );
     }
-
-    const result = await this.paymentService.createCheckout(userId, {
-      targetType: 'CLASS_BOOKING' as any,
-      targetId: bookingId,
-      amount: schedule.price,
-      currency: 'VND',
-    });
-
-    if (!result.checkoutUrl) {
-      throw new BadRequestException(
-        'Checkout session could not be created. Please try again.',
-      );
-    }
-
-    return { checkoutUrl: result.checkoutUrl };
   }
 
   private async invalidateAvailabilityForScheduleIds(
